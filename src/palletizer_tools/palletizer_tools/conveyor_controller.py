@@ -3,8 +3,9 @@
 Zones (upstream -> downstream) come from cell_config conveyor.zones. Each zone has a photo-eye
 near its downstream end. Zero-pressure accumulation:
   - pick zone: runs while its eye is clear; stops when the eye becomes blocked and HOLDS
-    until ~/resume. After a resume the zone runs; if the eye is still blocked (box not
-    picked) the box is released downstream and the zone stops again at the next arrival.
+    until ~/resume. It never runs while its eye is blocked: a resume with the box still
+    there keeps it in place (driving it into the end stop would rotate it and push the
+    queue into it).
   - other zones: run if their eye is clear or the next zone downstream is running.
   - ~/stop: maintenance stop of all zones until ~/resume.
 
@@ -41,7 +42,6 @@ class ConveyorController(Node):
         self.blocked = {z: False for z in self.zones}
         self.running = {z: True for z in self.zones}
         self.holding = False          # pick zone stopped for a box, waiting for resume
-        self.releasing = False        # resume issued while the pick eye is still blocked
         self.maintenance_stop = False
         self.ready_since = None
 
@@ -66,9 +66,7 @@ class ConveyorController(Node):
     def step(self):
         pick = self.zones[-1]
         # --- pick zone ---
-        if self.releasing and not self.blocked[pick]:
-            self.releasing = False
-        if not self.holding and not self.releasing and self.blocked[pick]:
+        if not self.holding and self.blocked[pick]:
             self.holding = True
             self.get_logger().info('box at pick eye, holding pick zone')
         run = {pick: not self.holding and not self.maintenance_stop}
@@ -94,11 +92,10 @@ class ConveyorController(Node):
 
     def on_resume(self, request, response):
         self.maintenance_stop = False
-        if self.holding:
-            self.holding = False
-            self.releasing = self.blocked[self.zones[-1]]
+        self.holding = False          # re-latches immediately if the box is still at the eye
         response.success = True
-        response.message = 'released box downstream' if self.releasing else 'running'
+        response.message = ('box still at the pick eye: holding' if self.blocked[self.zones[-1]]
+                            else 'running')
         return response
 
     def on_stop(self, request, response):

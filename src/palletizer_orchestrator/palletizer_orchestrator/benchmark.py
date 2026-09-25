@@ -136,6 +136,42 @@ def summary(planners, rtf):
     print(block)
 
 
+def summarize_run(run, marker):
+    """Markdown summary of one auto run (all pallets) into docs/RESULTS.md between
+    <!-- MARKER:BEGIN --> / <!-- MARKER:END -->."""
+    pallets = list(csv.DictReader(open(os.path.join(RESULTS, f'{run}_pallets.csv'))))
+    boxes = list(csv.DictReader(open(os.path.join(RESULTS, f'{run}_boxes.csv'))))
+    begin, end = f'<!-- {marker}:BEGIN -->', f'<!-- {marker}:END -->'
+    outcomes = {}
+    for b in boxes:
+        outcomes[b['outcome']] = outcomes.get(b['outcome'], 0) + 1
+    placed = [b for b in boxes if b['success'] == '1']
+    lines = [begin, '',
+             f'Run `{run}` (raw data: `results/{run}_*.csv`). Box outcomes: ' +
+             ', '.join(f'{k} {v}' for k, v in sorted(outcomes.items())) + '.', '',
+             '| Pallet | Boxes | Rejected | Fill % | Max height [m] | Collapses | Duration [s] | '
+             'Picks/min | Mean planning [ms] | Mean place err [mm] | End |',
+             '|---|---|---|---|---|---|---|---|---|---|---|']
+    for r in pallets:
+        lines.append(
+            f'| {r["pallet"]} | {r["boxes"]} | {r["rejected"]} | {float(r["fill_percent"]):.1f} | '
+            f'{float(r["max_height_m"]):.2f} | {r["collapses"]} | {float(r["duration_s"]):.0f} | '
+            f'{float(r["picks_per_min"]):.2f} | '
+            f'{1000 * float(r["mean_planning_time_s"] or 0):.0f} | '
+            f'{float(r["mean_place_err_mm"] or 0):.2f} | {r["end_reason"]} |')
+    me = [abs(float(b['measured_mass']) - float(b['true_mass'])) for b in placed if b['true_mass']]
+    de = [float(b['dim_err_max_mm']) for b in placed if b['dim_err_max_mm']]
+    lines += ['', f'Placed boxes: {len(placed)}; max dimension error {max(de):.2f} mm; '
+              f'F/T mass error mean {1000 * np.mean(me):.0f} g / max {1000 * max(me):.0f} g.', '',
+              end]
+    block = '\n'.join(lines)
+    doc = open(DOC).read()
+    doc = doc[:doc.index(begin)] + block + doc[doc.index(end) + len(end):]
+    with open(DOC, 'w') as f:
+        f.write(doc)
+    print(block)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--planners', nargs='+', default=['naive', 'heuristic'])
@@ -143,7 +179,12 @@ def main(argv=None):
     ap.add_argument('--rtf', type=float, default=1.0)
     ap.add_argument('--timeout', type=float, default=1800.0)
     ap.add_argument('--summary-only', action='store_true')
+    ap.add_argument('--run-summary', nargs=2, metavar=('RUN', 'MARKER'),
+                    help='write the summary of one auto run into docs/RESULTS.md and exit')
     args = ap.parse_args(argv)
+    if args.run_summary:
+        summarize_run(*args.run_summary)
+        return 0
     os.makedirs(RESULTS, exist_ok=True)
     log_dir = os.path.join(RESULTS, 'logs')
     os.makedirs(log_dir, exist_ok=True)

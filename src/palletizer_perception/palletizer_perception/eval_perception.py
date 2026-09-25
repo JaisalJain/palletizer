@@ -56,6 +56,8 @@ def main(argv=None):
     ap.add_argument('--n', type=int, default=60)
     ap.add_argument('--seed', type=int, default=7)
     ap.add_argument('--out', default=os.path.expanduser('~/palletizer_ws/results'))
+    ap.add_argument('--no-edge-cases', action='store_true',
+                    help='skip the worst-case boxes (max size at +/-25 deg, overhanging the belt)')
     args = ap.parse_args(argv)
 
     rclpy.init()
@@ -67,15 +69,26 @@ def main(argv=None):
     sim.call(sim.stop_cli, Trigger.Request())
     sim.delete_all_boxes()
 
+    sp = sim.cell['spawner']
+    hi, lo = sp['size_max'], sp['size_min']
+    yr = sp['yaw_range']
+    edge = [] if args.no_edge_cases else [
+        ((hi[0], hi[1], hi[2]), yr), ((hi[0], hi[1], lo[2]), -yr),
+        ((hi[0], lo[1], hi[2]), yr), ((lo[0], hi[1], hi[2]), -yr),
+        ((hi[0], 0.45, 0.3), yr), ((0.45, hi[1], 0.3), -yr),
+        ((lo[0], lo[1], lo[2]), yr), ((hi[0], hi[1], hi[2]), 0.0)]
     rows = []
-    for i in range(args.n):
+    for i in range(args.n + len(edge)):
         size, mass, yaw, rgba = boxes.random_box(rng, sim.cell['spawner'])
+        if i >= args.n:
+            size, yaw = edge[i - args.n]
         name = f'box_eval_{i:03d}'
         spawn_at_pick(sim, name, size, mass, yaw, rgba, rng)
         time.sleep(1.0)
         res = sim.call(detect, DetectBox.Request(), timeout=10.0)
         L, W, H, top, yaw_gt = ground_truth(sim, name, size)
-        row = {'i': i, 'name': name, 'L_gt': L, 'W_gt': W, 'H_gt': H, 'yaw_gt_deg': math.degrees(yaw_gt),
+        row = {'i': i, 'name': name, 'edge_case': int(i >= args.n), 'L_gt': L, 'W_gt': W, 'H_gt': H,
+               'yaw_gt_deg': math.degrees(yaw_gt),
                'success': res.success, 'message': res.message}
         if res.success:
             b = res.box
@@ -123,7 +136,8 @@ def main(argv=None):
         ('yaw error mean', yawe.mean() <= th['yaw_mean_deg'],
          f'{yawe.mean():.3f} deg (<= {th["yaw_mean_deg"]}), max {yawe.max():.3f}'),
     ]
-    print(f'\nperception eval: {len(rows)} boxes, seed {args.seed}, csv {path}')
+    print(f'\nperception eval: {len(rows)} boxes ({args.n} random + {len(edge)} edge cases), '
+          f'seed {args.seed}, csv {path}')
     print(f'  per-dim mean L/W/H: {dim_err.mean(axis=0).round(2)} mm, '
           f'max {dim_err.max(axis=0).round(2)} mm')
     failed = 0

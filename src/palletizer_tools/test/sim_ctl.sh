@@ -38,6 +38,7 @@ start() {
     sleep 1
   done
   echo "sim failed to start, see $log" >&2
+  stop
   return 1
 }
 

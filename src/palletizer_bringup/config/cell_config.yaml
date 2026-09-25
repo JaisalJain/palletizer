@@ -90,7 +90,8 @@ camera:
 
 perception:
   frames: 5                       # depth frames averaged per detection (box is stationary)
-  roi_margin_y: 0.05              # ROI = pick_zone.roi_x x (belt width + margin)
+  roi_margin_y: 0.16              # ROI = pick_zone.roi_x x (belt width + margin); boxes up to
+                                  # 0.6 m at 25 deg span 0.80 m and overhang the 0.6 m belt
   min_object_height: 0.04         # above belt top [m]
   max_object_height: 0.60
   plateau_tol: 0.008              # top-face pixels within this of the plateau height [m]

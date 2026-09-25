@@ -1,5 +1,9 @@
 # Acceleration limits for time parametrization (Pilz needs them). Velocity limits come from
 # ur_description. Speed/acceleration *scaling* is set per motion in cell_config.yaml (motion:).
+# Robot links keep this clearance from world objects (placed boxes, conveyor, mast):
+# Pilz trajectories are validated at discrete samples, zero clearance allowed grazing
+# contacts that nudged placed boxes by ~20 mm.
+default_robot_padding: 0.015
 default_velocity_scaling_factor: 0.5
 default_acceleration_scaling_factor: 0.5
 joint_limits:
