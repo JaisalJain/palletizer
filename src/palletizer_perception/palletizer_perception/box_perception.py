@@ -68,9 +68,10 @@ class BoxPerception(Node):
     # ---------------------------------------------------------------- inputs
     def on_depth(self, msg):
         d = np.array(self.bridge.imgmsg_to_cv2(msg), dtype=np.float32)
+        stamp = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9    # sim time
         with self.lock:
-            self.frames.append((time.monotonic(), d))
-            self.frames = self.frames[-self.n_frames * 2:]
+            self.frames.append((stamp, d))
+            self.frames = self.frames[-self.n_frames * 3:]
 
     def on_rgb(self, msg):
         self.rgb = self.bridge.imgmsg_to_cv2(msg, 'rgb8')
@@ -115,10 +116,13 @@ class BoxPerception(Node):
         link = self.robot_in_view()
         if link:
             return False, f'robot in the camera view ({link} over the pick zone)', DetectedBox()
-        t0 = time.monotonic()
-        while time.monotonic() - t0 < self.timeout:
+        # Fresh = rendered after this request (header stamp, sim time). Arrival time is not
+        # enough: frames queued while the node was busy would show the box still moving.
+        t_req = self.get_clock().now().nanoseconds * 1e-9
+        t_wall = time.monotonic()
+        while time.monotonic() - t_wall < self.timeout:
             with self.lock:
-                fresh = [d for t, d in self.frames if t >= t0]
+                fresh = [d for t, d in self.frames if t >= t_req]
             if len(fresh) >= self.n_frames and self.info is not None:
                 break
             time.sleep(0.02)
