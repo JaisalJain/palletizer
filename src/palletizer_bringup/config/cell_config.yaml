@@ -27,6 +27,7 @@ gripper:
   max_gap: 0.008                  # max distance cup face -> box top to allow a grasp
   max_offset: 0.02                # max lateral offset cup axis -> top-face center
   max_tilt: 0.15                  # max angle between cup axis and box top normal (rad)
+  ft_rate: 100.0                  # F/T sensor on suction_cup_joint [Hz]
 
 conveyor:
   length: 3.0
@@ -39,10 +40,27 @@ conveyor:
   speed: 0.25                     # belt surface speed, m/s
   frame_color: [0.35, 0.37, 0.40, 1.0]
   belt_color: [0.08, 0.08, 0.08, 1.0]
+  # Independently driven zones (zero-pressure accumulation), upstream -> downstream.
+  # Each zone has a photo-eye at eye_x near its downstream end. A zone runs if its eye is
+  # clear or the next zone is running. The pick zone stops when its eye is blocked and
+  # holds until /conveyor_controller/resume.
+  # Gap guarantee: a box waiting at a zone's eye is >= 0.10 m behind the box downstream,
+  # because next_eye_x - max_box_extent (0.8 m diagonal at 25 deg) - eye_x >= 0.10.
+  zones:
+    - {name: infeed, x_min: -2.55, x_max: -1.55, eye_x: -1.60}
+    - {name: accum,  x_min: -1.55, x_max: -0.65, eye_x: -0.70}
+    - {name: pick,   x_min: -0.65, x_max: 0.45,  eye_x: 0.25}
+  photo_eye:
+    height: 0.05                  # beam height above the belt top
+    rate: 50.0                    # Hz
+    blocked_range: 0.62           # beam reading below this (m) = blocked (clear = no return)
+  settle_time: 0.3                # s the pick eye must stay blocked with belt stopped = box ready
 
 pick_zone:
-  xyz: [0.0, 0.80, 0.80]          # on the belt surface, centered on the belt
-  stop_window: 0.03               # belt stops when a box center passes x >= pick_x - stop_window
+  # Nominal pick area center on the belt surface. Boxes stop with their leading edge at the
+  # pick photo-eye (conveyor.zones[pick].eye_x), so their centers land in [-0.15, +0.15].
+  xyz: [0.0, 0.80, 0.80]
+  roi_x: [-0.65, 0.45]            # perception ROI along the belt (world x)
 
 pallet:
   size: [1.2, 0.8, 0.144]         # EUR pallet
@@ -62,14 +80,17 @@ camera:
   rate: 15.0                      # Hz
   near: 0.1
   far: 4.0
+  depth_noise_stddev: 0.002       # Gaussian depth noise [m]
   mast_xy: [0.0, 1.45]
   mast_size: [0.08, 0.08, 2.40]
 
 spawner:
-  rate: 0.1                       # boxes per second (0 = only on demand)
+  rate: 0.5                       # spawn attempts per second (0 = only on demand);
+                                  # a box is spawned only when the min_gap allows
   size_min: [0.2, 0.2, 0.15]
   size_max: [0.6, 0.6, 0.40]
   mass_range: [1.0, 10.0]
-  yaw_range: 0.35                 # +/- rad
-  spawn_x: -2.15                  # box center x at spawn
-  clearance: 0.9                  # don't spawn if another box center is within this distance of spawn_x
+  yaw_range: 0.4363               # +/- rad (25 deg)
+  rear_margin: 0.03               # spawned box rear edge this far inside the belt start
+  min_gap: 0.12                   # spawn only if the new box ends up >= this far (m, along x)
+                                  # behind the rearmost box on the infeed

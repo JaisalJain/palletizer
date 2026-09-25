@@ -78,9 +78,16 @@ def spawn_request(name, size, mass, rgba, xyz, yaw):
     return req
 
 
-def spawn_xyz(cell, size):
+def x_extent(size, yaw):
+    """Footprint extent along world x of a box with the given size and yaw."""
+    return abs(size[0] * math.cos(yaw)) + abs(size[1] * math.sin(yaw))
+
+
+def spawn_xyz(cell, size, yaw=0.0):
+    """Spawn pose: rear edge just inside the upstream end of the belt."""
     cv = cell['conveyor']
-    return (cell['spawner']['spawn_x'], cv['y'], cv['belt_top_z'] + size[2] / 2.0 + 0.005)
+    x = cv['x_start'] + cell['spawner']['rear_margin'] + x_extent(size, yaw) / 2.0
+    return (x, cv['y'], cv['belt_top_z'] + size[2] / 2.0 + 0.005)
 
 
 def poses_from_tf(msg, prefix='box_'):

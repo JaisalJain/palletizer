@@ -34,13 +34,16 @@ def generate_launch_description():
     spawner = Node(
         package='palletizer_tools', executable='box_spawner',
         output='screen',
-        parameters=[common, {'rate': LaunchConfiguration('spawn_rate')}])
+        parameters=[common, {'rate': LaunchConfiguration('spawn_rate'),
+                             'seed': LaunchConfiguration('seed')}])
 
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value=''),
-        DeclareLaunchArgument('spawn_rate', default_value='0.1',
-                              description='Boxes per second (0 = only via ~/spawn_box)'),
+        DeclareLaunchArgument('spawn_rate', default_value='0.5',
+                              description='Spawn attempts/s (0 = only via ~/spawn_box)'),
+        DeclareLaunchArgument('seed', default_value='-1',
+                              description='Box sequence seed (-1 = random)'),
         sim,
         conveyor,
         # Give Gazebo time to load the world before the first spawn.

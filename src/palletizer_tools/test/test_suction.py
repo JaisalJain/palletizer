@@ -5,6 +5,7 @@ import time
 
 import numpy as np
 from sim_helpers import run
+from std_srvs.srv import Trigger
 
 BOX = (0.40, 0.30, 0.25)
 MASS = 10.0     # worst case of the spawner range (1-10 kg)
@@ -13,11 +14,12 @@ LIFT = 0.30
 
 
 def test(sim, c):
+    sim.call(sim.stop_cli, Trigger.Request())   # hold all zones during the test
     sim.delete_all_boxes()
     px, py, pz = sim.cell['pick_zone']['xyz']
     name = 'box_suctiontest'
     sim.spawn_box(name, BOX, MASS, (px, py, pz + BOX[2] / 2 + 0.005), yaw=0.15)
-    time.sleep(2.0)  # settle; the conveyor controller keeps the belt stopped (box in pick zone)
+    time.sleep(2.0)  # settle
 
     sim.suction(False)
     sim.move_joints(sim.pick_approach_joints())
@@ -70,6 +72,7 @@ def test(sim, c):
     sim.move_tcp(top + [0, 0, 0.4], yaw)
     sim.home()
     sim.delete_all_boxes()
+    sim.call(sim.resume_cli, Trigger.Request())
 
 
 if __name__ == '__main__':

@@ -1,0 +1,8 @@
+# Suction F/T sensor. tare=true stores the current reading as zero.
+bool tare
+float64 duration          # averaging window [s]
+---
+bool success
+string message
+float64 mass              # [kg] (force_z / g after tare)
+float64 force_z           # [N]

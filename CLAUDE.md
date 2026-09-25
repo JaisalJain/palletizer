@@ -9,6 +9,18 @@ stability check.
 ## Phases
 - **v0 (done)**: workspace, robot description, Gazebo world, runtime suction plugin, box
   spawner, conveyor control, integration tests.
+- **v1 (in progress, one combined task)**: A spawner/world updates (done), B perception,
+  C MoveIt pick & place, D packing, E orchestrator + metrics + benchmark.
+
+## Ground rules (v1)
+- Ground truth (`/sim/box_poses`, `/sim/box_specs`) is for evaluation, tests, the collapse
+  detector and the simulated upstream process (spawner) ONLY — never an input to
+  perception, planning or robot/conveyor control.
+- All geometry and tunables live in cell_config.yaml. Acceptance thresholds are never loosened.
+- Python deps not in apt (pybullet, gymnasium) live in `.venv` (see requirements.txt); only
+  palletizer_packing imports them. Source order: ROS → `.venv/bin/activate` → `install/setup.bash`;
+  build with `python -m colcon build`. ament_python packages set
+  `[build_scripts] executable = /usr/bin/env python3` in setup.cfg.
 - v1: perception (box size / yaw / top-face center from the overhead RGB-D).
 - v2: MoveIt 2 pick & place.
 - v3: packing planners + stability checker.
@@ -30,6 +42,12 @@ the launch file renders the world to `/tmp/palletizer/palletizing_cell.sdf`.
 ## Cell layout (world frame = floor under the robot base axis; +x = conveyor travel)
 - Pedestal 0.25×0.25×0.70 m; UR10e `base_link` at (0, 0, 0.70).
 - Conveyor: belt 3.0×0.6 m, centerline y = 0.80, x ∈ [−2.55, 0.45], top z = 0.80, end stop at x_end.
+  Three driven zones (infeed / accum / pick, `conveyor.zones`) with single-ray gpu_lidar
+  photo-eyes; zero-pressure accumulation keeps queued boxes >= 0.10 m apart. Boxes stop
+  with their leading edge at the pick eye (x = 0.25), so their centers land in [−0.15, 0.15].
+- Depth camera has Gaussian noise σ = 2 mm (`camera.depth_noise_stddev`).
+- F/T sensor on `suction_cup_joint` → `/suction/wrench` (WrenchStamped, 100 Hz); reads the
+  cup's own weight (≈0.98 N) when empty — tare before each grasp.
 - Pick zone (0, 0.80, 0.80). Pallet (EUR 1.2×0.8×0.144) centered at (0, −0.60).
 - Overhead camera at (0, 0.80, 2.30) looking straight down (1.5 m above the belt), 640×480 @ 15 Hz, hfov 1.2.
 - Suction: 0.12 m body + 0.03 m cup; `suction_tcp` = cup face center, +z out of the cup.
@@ -51,10 +69,12 @@ pallet top surface nearest the robot on the −x side, world-aligned), `overhead
 | `/sim/box_poses` | tf2_msgs/TFMessage | ground-truth world poses of all `box_*` models, 30 Hz. **Not** on `/tf` |
 | `/suction/cmd` | std_msgs/Bool | true = on (attaches if a box qualifies), false = release |
 | `/suction/grasped`, `/suction/attached_model` | Bool / String | 10 Hz + on every change |
-| `/conveyor/belt_cmd_vel` | std_msgs/Float64 | belt speed m/s (published by conveyor_controller) |
-| `/conveyor_controller/resume`, `/stop` | std_srvs/Trigger | belt stays stopped after a box reaches the pick zone until `resume` |
-| `/conveyor_controller/box_in_pick_zone`, `/running` | String / Bool | |
-| `/box_spawner/spawn_box` | std_srvs/Trigger | one random box now (refused if spawn area occupied) |
+| `/conveyor/<zone>/cmd_vel`, `/conveyor/<zone>/eye` | Float64 / LaserScan | per-zone belt speed and photo-eye (zones: infeed, accum, pick) |
+| `/conveyor_controller/resume`, `/stop` | std_srvs/Trigger | pick zone holds after a box reaches the pick eye until `resume`; `stop` = all zones |
+| `/conveyor_controller/box_ready`, `/running`, `/eyes` | Bool / Bool / String | box_ready = held box settled for `settle_time` |
+| `/box_spawner/spawn_box` | std_srvs/Trigger | next box of the seeded sequence (refused until the infeed gap allows) |
+| `/sim/box_specs` | palletizer_interfaces/BoxSpec (transient local) | ground-truth dims/mass, EVALUATION ONLY |
+| `/suction/wrench` | geometry_msgs/WrenchStamped | F/T on the cup joint |
 | `/world/palletizing_cell/create`, `/remove`, `/set_pose` | ros_gz_interfaces Spawn/Delete/SetEntityPose | bridged gz services |
 | `/joint_trajectory_controller/follow_joint_trajectory` | FollowJointTrajectory | position-controlled arm |
 

@@ -76,6 +76,16 @@
          so the SuctionGripper plugin can attach boxes to it. -->
     <gazebo reference="suction_cup_joint">
       <preserveFixedJoint>true</preserveFixedJoint>
+      <!-- Wrist-side F/T measurement of the cup + payload: used to weigh picked boxes -->
+      <sensor name="suction_ft" type="force_torque">
+        <always_on>true</always_on>
+        <update_rate>${cfg['ft_rate']}</update_rate>
+        <topic>/suction/wrench</topic>
+        <force_torque>
+          <frame>child</frame>
+          <measure_direction>child_to_parent</measure_direction>
+        </force_torque>
+      </sensor>
     </gazebo>
     <gazebo reference="suction_cup">
       <mu1>1.0</mu1>

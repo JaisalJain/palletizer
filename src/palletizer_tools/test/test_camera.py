@@ -15,6 +15,7 @@ from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import CameraInfo, Image, PointCloud2
 from sensor_msgs_py import point_cloud2
 from sim_helpers import OUTPUT_DIR, run
+from std_srvs.srv import Trigger
 
 TOPICS = {
     '/overhead_camera/image': Image,
@@ -65,6 +66,7 @@ def test(sim, c):
             'point cloud frame is overhead_camera_link (x-forward cloud)')
 
     # --- a box under the camera ---
+    sim.call(sim.stop_cli, Trigger.Request())   # hold all zones: box stays under the camera
     sim.delete_all_boxes()
     time.sleep(1.0)
     empty_depth = CvBridge().imgmsg_to_cv2(grab('/overhead_camera/depth_image'))
@@ -132,6 +134,7 @@ def test(sim, c):
     c.check(box_mean.sum() > bg_mean.sum() + 60,
             f'box visible in RGB (box BGR {box_mean.round()}, surroundings {bg_mean.round()})')
     sim.delete_all_boxes()
+    sim.call(sim.resume_cli, Trigger.Request())
 
 
 if __name__ == '__main__':

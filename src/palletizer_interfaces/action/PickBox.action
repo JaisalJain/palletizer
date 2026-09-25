@@ -1,0 +1,10 @@
+DetectedBox box
+---
+bool success
+string error_code         # '' | NO_IK | PLAN_FAILED | EXEC_FAILED | NO_GRASP | LOST_GRASP
+string message
+float64 measured_mass     # [kg]
+string sim_model_name     # SIM ONLY (suction plugin attached_model), for evaluation
+---
+string phase
+float32 progress

@@ -37,12 +37,37 @@
   gz_type_name: gz.msgs.Pose_V
   direction: GZ_TO_ROS
 
-# ---- Conveyor belt velocity (m/s) ----
-- ros_topic_name: /conveyor/belt_cmd_vel
-  gz_topic_name: /model/conveyor/link/belt/track_cmd_vel
+# ---- Conveyor: per-zone belt velocity (m/s) and photo-eyes ----
+- ros_topic_name: /conveyor/infeed/cmd_vel
+  gz_topic_name: /model/conveyor/link/belt_infeed/track_cmd_vel
   ros_type_name: std_msgs/msg/Float64
   gz_type_name: gz.msgs.Double
   direction: ROS_TO_GZ
+- ros_topic_name: /conveyor/infeed/eye
+  gz_topic_name: /conveyor/eye_infeed
+  ros_type_name: sensor_msgs/msg/LaserScan
+  gz_type_name: gz.msgs.LaserScan
+  direction: GZ_TO_ROS
+- ros_topic_name: /conveyor/accum/cmd_vel
+  gz_topic_name: /model/conveyor/link/belt_accum/track_cmd_vel
+  ros_type_name: std_msgs/msg/Float64
+  gz_type_name: gz.msgs.Double
+  direction: ROS_TO_GZ
+- ros_topic_name: /conveyor/accum/eye
+  gz_topic_name: /conveyor/eye_accum
+  ros_type_name: sensor_msgs/msg/LaserScan
+  gz_type_name: gz.msgs.LaserScan
+  direction: GZ_TO_ROS
+- ros_topic_name: /conveyor/pick/cmd_vel
+  gz_topic_name: /model/conveyor/link/belt_pick/track_cmd_vel
+  ros_type_name: std_msgs/msg/Float64
+  gz_type_name: gz.msgs.Double
+  direction: ROS_TO_GZ
+- ros_topic_name: /conveyor/pick/eye
+  gz_topic_name: /conveyor/eye_pick
+  ros_type_name: sensor_msgs/msg/LaserScan
+  gz_type_name: gz.msgs.LaserScan
+  direction: GZ_TO_ROS
 
 # ---- Suction gripper ----
 - ros_topic_name: /suction/cmd
@@ -54,6 +79,11 @@
   gz_topic_name: /suction/grasped
   ros_type_name: std_msgs/msg/Bool
   gz_type_name: gz.msgs.Boolean
+  direction: GZ_TO_ROS
+- ros_topic_name: /suction/wrench
+  gz_topic_name: /suction/wrench
+  ros_type_name: geometry_msgs/msg/WrenchStamped
+  gz_type_name: gz.msgs.Wrench
   direction: GZ_TO_ROS
 - ros_topic_name: /suction/attached_model
   gz_topic_name: /suction/attached_model

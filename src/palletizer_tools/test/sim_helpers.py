@@ -178,12 +178,16 @@ class SimClient(Node):
         return q
 
     # ---------------- boxes / conveyor ----------------
+    def delete_box(self, name):
+        req = DeleteEntity.Request()
+        req.entity.name = name
+        req.entity.type = Entity.MODEL
+        self.call(self.delete_cli, req)
+        self.wait_for(lambda: name not in self.box_poses, 3.0)
+
     def delete_all_boxes(self):
         for name in list(self.box_poses):
-            req = DeleteEntity.Request()
-            req.entity.name = name
-            req.entity.type = Entity.MODEL
-            self.call(self.delete_cli, req)
+            self.delete_box(name)
         return self.wait_for(lambda: not self.box_poses, 5.0) or not self.box_poses
 
     def spawn_box(self, name, size, mass, xyz, yaw=0.0, rgba=(0.72, 0.55, 0.35, 1.0)):

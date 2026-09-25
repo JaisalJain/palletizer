@@ -1,22 +1,21 @@
 #!/usr/bin/env bash
-# Test 1: clean colcon build of the palletizer packages with no compiler/setuptools warnings,
+# Test 1: clean from-scratch colcon build of all workspace packages with no compiler/setuptools warnings,
 # and the Gazebo plugins link the ROS-vendored gz-sim (not the /usr gz-harmonic install).
 # Environment: ROS, then the project venv (pybullet/gymnasium), then the workspace overlay.
 WS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/.venv/bin/activate"
-[[ -f $WS_ROOT/install/setup.bash ]] && source "$WS_ROOT/install/setup.bash"
+# (no workspace overlay: this is a from-scratch build)
 set -u
 WS=$(cd "$(dirname "$0")/../../.." && pwd)
 OUT=$(mktemp -d /tmp/palletizer_build_test.XXXX)
-PKGS="palletizer_description palletizer_gazebo palletizer_tools palletizer_bringup"
 fail=0
 check() { if [[ $1 == 0 ]]; then echo "  [PASS] $2"; else echo "  [FAIL] $2"; fail=$((fail + 1)); fi; }
 
 echo "== test_build (fresh build in $OUT)"
 cd "$WS"
 python -m colcon --log-base "$OUT/log" build --build-base "$OUT/build" --install-base "$OUT/install" \
-  --packages-select $PKGS --event-handlers console_cohesion+ \
+  --event-handlers console_cohesion+ \
   --cmake-args -DCMAKE_BUILD_TYPE=Release > "$OUT/build.txt" 2>&1
 check $? "colcon build succeeded"
 

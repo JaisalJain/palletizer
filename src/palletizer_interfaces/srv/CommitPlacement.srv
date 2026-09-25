@@ -1,0 +1,8 @@
+# Add a placed box to the pallet model (after place + verify).
+Placement placement
+DetectedBox box
+float64 mass
+string sim_model_name     # SIM ONLY, lets the collapse detector / pallet swap identify it
+---
+bool success
+string message

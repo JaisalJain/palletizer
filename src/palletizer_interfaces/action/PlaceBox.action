@@ -1,0 +1,9 @@
+Placement placement
+DetectedBox box
+---
+bool success
+string error_code         # '' | NO_IK | PLAN_FAILED | EXEC_FAILED | RELEASE_FAILED
+string message
+---
+string phase
+float32 progress

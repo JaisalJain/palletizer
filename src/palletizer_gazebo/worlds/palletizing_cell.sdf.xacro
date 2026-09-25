@@ -52,6 +52,7 @@
     <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
       <render_engine>ogre2</render_engine>
     </plugin>
+    <plugin filename="gz-sim-forcetorque-system" name="gz::sim::systems::ForceTorque"/>
     <!-- Ground-truth poses of all box_* models (names preserved through the ROS bridge) -->
     <plugin filename="palletizer_model_pose_publisher" name="palletizer_gazebo::ModelPosePublisher">
       <model_prefix>box_</model_prefix>
@@ -102,41 +103,45 @@
     <model name="conveyor">
       <static>true</static>
       <pose>${cv_cx} ${cv['y']} 0 0 0 0</pose>
-      <!-- Belt: TrackController moves the contact surface, not the link -->
-      <link name="belt">
-        <pose>0 0 ${belt_z} 0 0 0</pose>
-        <xacro:box_inertia m="20" x="${cv_len}" y="${cv['belt_width']}" z="${cv['belt_thickness']}"/>
-        <collision name="belt_collision">
-          <geometry><box><size>${cv_len} ${cv['belt_width']} ${cv['belt_thickness']}</size></box></geometry>
-          <surface>
-            <friction>
-              <ode>
-                <mu>0.7</mu>
-                <mu2>150</mu2>
-                <fdir1>0 1 0</fdir1>
-              </ode>
-            </friction>
-          </surface>
-        </collision>
-        <visual name="belt_visual">
-          <geometry><box><size>${cv_len} ${cv['belt_width']} ${cv['belt_thickness']}</size></box></geometry>
-          <xacro:material rgba="${cv['belt_color']}"/>
-        </visual>
-        <visual name="roller_in">
-          <pose>${-cv_len / 2} 0 0 ${pi / 2} 0 0</pose>
-          <geometry><cylinder><radius>${cv['belt_thickness'] / 2}</radius><length>${cv['belt_width'] + 0.04}</length></cylinder></geometry>
-          <xacro:material rgba="${cv['frame_color']}"/>
-        </visual>
-        <visual name="roller_out">
-          <pose>${cv_len / 2} 0 0 ${pi / 2} 0 0</pose>
-          <geometry><cylinder><radius>${cv['belt_thickness'] / 2}</radius><length>${cv['belt_width'] + 0.04}</length></cylinder></geometry>
-          <xacro:material rgba="${cv['frame_color']}"/>
-        </visual>
-      </link>
-      <plugin filename="gz-sim-track-controller-system" name="gz::sim::systems::TrackController">
-        <link>belt</link>
-        <odometry_publish_frequency>0</odometry_publish_frequency>
-      </plugin>
+      <!-- Belt zones: one link + TrackController each (zero-pressure accumulation).
+           TrackController moves the contact surface, not the link. -->
+      <xacro:macro name="belt_zones" params="zones">
+        <xacro:if value="${len(zones) > 0}">
+          <xacro:property name="z" value="${zones[0]}"/>
+          <xacro:property name="zl" value="${z['x_max'] - z['x_min']}"/>
+          <link name="belt_${z['name']}">
+            <pose>${(z['x_min'] + z['x_max']) / 2 - cv_cx} 0 ${belt_z} 0 0 0</pose>
+            <xacro:box_inertia m="5" x="${zl}" y="${cv['belt_width']}" z="${cv['belt_thickness']}"/>
+            <collision name="belt_collision">
+              <geometry><box><size>${zl} ${cv['belt_width']} ${cv['belt_thickness']}</size></box></geometry>
+              <surface>
+                <friction>
+                  <ode>
+                    <mu>0.7</mu>
+                    <mu2>150</mu2>
+                    <fdir1>0 1 0</fdir1>
+                  </ode>
+                </friction>
+              </surface>
+            </collision>
+            <visual name="belt_visual">
+              <geometry><box><size>${zl - 0.01} ${cv['belt_width']} ${cv['belt_thickness']}</size></box></geometry>
+              <xacro:material rgba="${cv['belt_color']}"/>
+            </visual>
+            <visual name="roller">
+              <pose>${zl / 2} 0 0 ${pi / 2} 0 0</pose>
+              <geometry><cylinder><radius>${cv['belt_thickness'] / 2}</radius><length>${cv['belt_width'] + 0.04}</length></cylinder></geometry>
+              <xacro:material rgba="${cv['frame_color']}"/>
+            </visual>
+          </link>
+          <plugin filename="gz-sim-track-controller-system" name="gz::sim::systems::TrackController">
+            <link>belt_${z['name']}</link>
+            <odometry_publish_frequency>0</odometry_publish_frequency>
+          </plugin>
+          <xacro:belt_zones zones="${zones[1:]}"/>
+        </xacro:if>
+      </xacro:macro>
+      <xacro:belt_zones zones="${cv['zones']}"/>
 
       <!-- Frame: side rails below belt level + legs (visual) and one collision block -->
       <link name="frame">
@@ -172,22 +177,46 @@
       </link>
     </model>
 
-    <!-- Pick-zone floor marking on the belt (visual only, no collision) -->
-    <model name="pick_zone_marker">
+    <!-- Photo-eyes: one single-ray gpu_lidar per zone, across the belt at the zone's
+         downstream end (emitter on the robot-side rail, reflector on the far rail).
+         The conveyor controller only uses these beams, never ground truth. -->
+    <xacro:property name="eye" value="${cv['photo_eye']}"/>
+    <model name="photo_eyes">
       <static>true</static>
-      <pose>${cell['pick_zone']['xyz'][0]} ${cell['pick_zone']['xyz'][1]} ${cell['pick_zone']['xyz'][2] + 0.0005} 0 0 0</pose>
-      <link name="link">
-        <visual name="stripe_up">
-          <pose>-0.3 0 0 0 0 0</pose>
-          <geometry><box><size>0.015 ${cv['belt_width']} 0.001</size></box></geometry>
-          <xacro:material rgba="${[0.9, 0.75, 0.1, 1]}"/>
-        </visual>
-        <visual name="stripe_down">
-          <pose>0.3 0 0 0 0 0</pose>
-          <geometry><box><size>0.015 ${cv['belt_width']} 0.001</size></box></geometry>
-          <xacro:material rgba="${[0.9, 0.75, 0.1, 1]}"/>
-        </visual>
-      </link>
+      <xacro:macro name="eyes" params="zones">
+        <xacro:if value="${len(zones) > 0}">
+          <xacro:property name="z" value="${zones[0]}"/>
+          <link name="eye_${z['name']}">
+            <pose>${z['eye_x']} ${cv['y'] - cv['belt_width'] / 2 - 0.04} ${cv['belt_top_z'] + eye['height']} 0 0 ${pi / 2}</pose>
+            <visual name="emitter">
+              <geometry><box><size>0.03 0.03 0.05</size></box></geometry>
+              <xacro:material rgba="${[0.1, 0.6, 0.2, 1]}"/>
+            </visual>
+            <visual name="reflector">
+              <pose>${cv['belt_width'] + 0.08} 0 0 0 0 0</pose>
+              <geometry><box><size>0.01 0.04 0.05</size></box></geometry>
+              <xacro:material rgba="${[0.9, 0.1, 0.1, 1]}"/>
+            </visual>
+            <sensor name="eye_${z['name']}" type="gpu_lidar">
+              <always_on>true</always_on>
+              <update_rate>${eye['rate']}</update_rate>
+              <topic>/conveyor/eye_${z['name']}</topic>
+              <gz_frame_id>eye_${z['name']}</gz_frame_id>
+              <lidar>
+                <scan>
+                  <horizontal><samples>3</samples><resolution>1</resolution>
+                    <min_angle>-0.005</min_angle><max_angle>0.005</max_angle></horizontal>
+                  <vertical><samples>1</samples><resolution>1</resolution>
+                    <min_angle>0</min_angle><max_angle>0</max_angle></vertical>
+                </scan>
+                <range><min>0.02</min><max>${cv['belt_width'] + 0.06}</max><resolution>0.001</resolution></range>
+              </lidar>
+            </sensor>
+          </link>
+          <xacro:eyes zones="${zones[1:]}"/>
+        </xacro:if>
+      </xacro:macro>
+      <xacro:eyes zones="${cv['zones']}"/>
     </model>
 
     <!-- ============================ EUR pallet ============================ -->
@@ -264,6 +293,11 @@
               <near>${cam['near']}</near>
               <far>${cam['far']}</far>
             </clip>
+            <noise>
+              <type>gaussian</type>
+              <mean>0.0</mean>
+              <stddev>${cam['depth_noise_stddev']}</stddev>
+            </noise>
             <depth_camera>
               <clip>
                 <near>${cam['near']}</near>
