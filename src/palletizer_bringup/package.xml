@@ -13,6 +13,8 @@
   <exec_depend>palletizer_gazebo</exec_depend>
   <exec_depend>palletizer_tools</exec_depend>
   <exec_depend>palletizer_perception</exec_depend>
+  <exec_depend>palletizer_moveit_config</exec_depend>
+  <exec_depend>palletizer_motion</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

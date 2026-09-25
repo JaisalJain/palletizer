@@ -1,0 +1,11 @@
+# Acceleration limits for time parametrization (Pilz needs them). Velocity limits come from
+# ur_description. Speed/acceleration *scaling* is set per motion in cell_config.yaml (motion:).
+default_velocity_scaling_factor: 0.5
+default_acceleration_scaling_factor: 0.5
+joint_limits:
+  shoulder_pan_joint: {has_acceleration_limits: true, max_acceleration: 3.0}
+  shoulder_lift_joint: {has_acceleration_limits: true, max_acceleration: 3.0}
+  elbow_joint: {has_acceleration_limits: true, max_acceleration: 3.0}
+  wrist_1_joint: {has_acceleration_limits: true, max_acceleration: 3.0}
+  wrist_2_joint: {has_acceleration_limits: true, max_acceleration: 3.0}
+  wrist_3_joint: {has_acceleration_limits: true, max_acceleration: 3.0}

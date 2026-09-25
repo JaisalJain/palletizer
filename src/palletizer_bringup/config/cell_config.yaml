@@ -101,6 +101,40 @@ perception:
   color_split_min_dist: 12.0      # min RGB cluster distance (0-255) to split merged boxes
   detect_timeout: 3.0             # s
 
+motion:
+  planning_group: manipulator
+  tcp_link: suction_tcp
+  ptp_velocity_scaling: 0.6
+  ptp_acceleration_scaling: 0.4
+  lin_velocity_scaling: 0.25       # of pilz cartesian limits (1.0 m/s)
+  lin_acceleration_scaling: 0.25
+  lin_slow_velocity_scaling: 0.08  # last approach centimetres (descent into contact / release)
+  slow_zone: 0.03                  # [m] length of the slow final approach
+  pre_grasp_height: 0.15           # above the detected top-face center
+  pick_gap: 0.003                  # cup face this far above the top face when suction turns on
+  transit_clearance: 0.45          # carried box bottom >= belt top + this before swinging
+  pre_place_height: 0.15           # above the target top-face center
+  release_gap: 0.005               # box bottom this far above the resting surface at release
+  retreat_height: 0.15
+  grasp_confirm_timeout: 1.0       # s
+  release_confirm_timeout: 1.0
+  release_settle: 0.4              # s to wait after release before retreating
+  weigh_window: 0.4                # s F/T averaging window
+  weigh_settle: 0.3                # s to wait after the lift before weighing
+  planning_time: 5.0
+  ompl_fallback: true
+  # Collision model of the carried box: slightly smaller than measured so that the surface it
+  # rests on (belt / pallet / box below) and neighbours placed flush don't count as contacts.
+  held_box_shrink_xy: 0.003        # per side [m]
+  held_box_bottom_clearance: 0.015 # [m] trimmed from the bottom
+
+reachability:
+  file: reachability_ur10e.npz     # in palletizer_motion/config (built offline)
+  grid_step: 0.05                  # [m] over the pallet footprint (box-center positions)
+  edge_inset: 0.10                 # smallest possible box half-size
+  top_heights: [0.15, 1.20, 0.05]  # [first, last, step] box-top height above pallet top
+  min_coverage: 1.0                # usable stack height = highest level with this coverage
+
 # Acceptance thresholds (Milestone B). Do not loosen.
 perception_eval:
   dim_mean_mm: 5.0

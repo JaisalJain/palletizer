@@ -19,6 +19,11 @@ UR10E_DH = {  # d, a, alpha
 }
 
 
+# UR10e position limits (ur_description/config/ur10e/joint_limits.yaml): elbow +/-pi, rest +/-2pi
+LOWER = np.array([-2 * np.pi, -2 * np.pi, -np.pi, -2 * np.pi, -2 * np.pi, -2 * np.pi])
+UPPER = -LOWER
+
+
 def _tf(xyz=(0, 0, 0), rot=None):
     T = np.eye(4)
     T[:3, 3] = xyz
@@ -70,8 +75,10 @@ class UrKinematics:
             return np.concatenate([dp, 0.3 * dr, 1e-3 * (q - seed)])
 
         best = None
-        for s in [seed] + [seed + np.random.default_rng(i).normal(0, 0.3, 6) for i in range(8)]:
-            r = least_squares(residual, s, bounds=(-2 * np.pi, 2 * np.pi))
+        seeds = [seed] + [seed + np.random.default_rng(i).normal(0, 0.3, 6) for i in range(8)]
+        for s in seeds:
+            s = np.clip(s, LOWER + 1e-6, UPPER - 1e-6)
+            r = least_squares(residual, s, bounds=(LOWER, UPPER))
             err = np.linalg.norm(r.fun[:6])
             if best is None or err < best[0]:
                 best = (err, r.x)

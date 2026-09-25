@@ -41,6 +41,16 @@ def generate_launch_description():
         package='palletizer_perception', executable='box_perception',
         output='screen', parameters=[common])
 
+    move_group = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(
+            get_package_share_directory('palletizer_moveit_config'), 'launch',
+            'move_group.launch.py')),
+        launch_arguments={'cell_config': cell_config}.items(),
+    )
+    motion = Node(
+        package='palletizer_motion', executable='motion_server',
+        output='screen', parameters=[common])
+
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value=''),
@@ -51,6 +61,7 @@ def generate_launch_description():
         sim,
         conveyor,
         perception,
+        TimerAction(period=5.0, actions=[move_group, motion]),
         # Give Gazebo time to load the world before the first spawn.
         TimerAction(period=8.0, actions=[spawner]),
     ])

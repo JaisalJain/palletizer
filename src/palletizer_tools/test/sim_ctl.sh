@@ -25,11 +25,12 @@ start() {
   local log=${1:-/tmp/palletizer_sim.log}
   stop
   setsid ros2 launch palletizer_bringup palletizer.launch.py gui:=false rviz:=false \
-    spawn_rate:=0.0 > "$log" 2>&1 &
+    spawn_rate:=0.0 ${SIM_ARGS:-} > "$log" 2>&1 &
   echo $! > "$PIDFILE"
-  for _ in $(seq 120); do
+  for _ in $(seq 180); do
     if grep -q "box_spawner ready" "$log" && \
-       grep -q "activated joint_trajectory_controller" "$log"; then
+       grep -q "activated joint_trajectory_controller" "$log" && \
+       grep -q "motion_server ready" "$log"; then
       sleep 2
       echo "sim ready (log: $log)"
       return 0
