@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://wiki.ros.org/xacro">
+
+  <xacro:macro name="cylinder_inertial" params="mass radius length *origin">
+    <inertial>
+      <xacro:insert_block name="origin"/>
+      <mass value="${mass}"/>
+      <inertia ixx="${mass * (3 * radius * radius + length * length) / 12}" ixy="0" ixz="0"
+               iyy="${mass * (3 * radius * radius + length * length) / 12}" iyz="0"
+               izz="${mass * radius * radius / 2}"/>
+    </inertial>
+  </xacro:macro>
+
+  <!--
+    Suction gripper: a cylindrical body bolted to the tool flange plus a suction cup.
+    The suction_cup link origin is at the cup face center with +z pointing out of the cup,
+    so suction_cup and suction_tcp coincide. suction_tcp is kept as a separate named frame
+    so later phases can move it (e.g. for foam compression) without touching the cup link.
+  -->
+  <xacro:macro name="suction_gripper" params="parent cfg">
+    <xacro:property name="body_r" value="${cfg['body_radius']}"/>
+    <xacro:property name="body_l" value="${cfg['body_length']}"/>
+    <xacro:property name="cup_r" value="${cfg['cup_radius']}"/>
+    <xacro:property name="cup_l" value="${cfg['cup_length']}"/>
+
+    <link name="suction_body">
+      <visual>
+        <origin xyz="0 0 ${body_l / 2}"/>
+        <geometry><cylinder radius="${body_r}" length="${body_l}"/></geometry>
+        <material name="suction_grey"><color rgba="0.55 0.57 0.6 1"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${body_l / 2}"/>
+        <geometry><cylinder radius="${body_r}" length="${body_l}"/></geometry>
+      </collision>
+      <xacro:cylinder_inertial mass="${cfg['body_mass']}" radius="${body_r}" length="${body_l}">
+        <origin xyz="0 0 ${body_l / 2}"/>
+      </xacro:cylinder_inertial>
+    </link>
+
+    <joint name="suction_body_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="suction_body"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <link name="suction_cup">
+      <visual>
+        <origin xyz="0 0 ${-cup_l / 2}"/>
+        <geometry><cylinder radius="${cup_r}" length="${cup_l}"/></geometry>
+        <material name="suction_blue"><color rgba="0.1 0.3 0.8 1"/></material>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${-cup_l / 2}"/>
+        <geometry><cylinder radius="${cup_r}" length="${cup_l}"/></geometry>
+      </collision>
+      <xacro:cylinder_inertial mass="${cfg['cup_mass']}" radius="${cup_r}" length="${cup_l}">
+        <origin xyz="0 0 ${-cup_l / 2}"/>
+      </xacro:cylinder_inertial>
+    </link>
+
+    <joint name="suction_cup_joint" type="fixed">
+      <parent link="suction_body"/>
+      <child link="suction_cup"/>
+      <origin xyz="0 0 ${body_l + cup_l}" rpy="0 0 0"/>
+    </joint>
+
+    <link name="suction_tcp"/>
+    <joint name="suction_tcp_joint" type="fixed">
+      <parent link="suction_cup"/>
+      <child link="suction_tcp"/>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+    </joint>
+
+    <!-- Keep the cup as its own link in Gazebo (URDF->SDF otherwise lumps fixed-joint links)
+         so the SuctionGripper plugin can attach boxes to it. -->
+    <gazebo reference="suction_cup_joint">
+      <preserveFixedJoint>true</preserveFixedJoint>
+    </gazebo>
+    <gazebo reference="suction_cup">
+      <mu1>1.0</mu1>
+      <mu2>1.0</mu2>
+    </gazebo>
+  </xacro:macro>
+</robot>

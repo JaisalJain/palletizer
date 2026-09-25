@@ -1,0 +1,74 @@
+# Palletizing cell — single source of truth for all dimensions and poses.
+# Units: meters, radians, kg. World frame: floor level, directly below the robot base axis.
+# +x runs along the conveyor (direction of travel), +y points from the robot toward the conveyor.
+# Read by: palletizer_description (robot xacro), palletizer_gazebo (world xacro, launch),
+#          palletizer_tools (spawner, conveyor controller, tests).
+
+world_name: palletizing_cell
+
+robot:
+  ur_type: ur10e
+  pedestal:
+    size: [0.25, 0.25, 0.70]      # x, y, z; base_link sits on top of it
+    xy: [0.0, 0.0]
+    mass: 80.0
+  # Joint home pose: pan toward the conveyor, arm folded above the pick zone.
+  home: [1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+
+gripper:
+  body_radius: 0.04               # suction body cylinder
+  body_length: 0.12
+  body_mass: 0.6
+  cup_radius: 0.05                # suction cup
+  cup_length: 0.03
+  cup_mass: 0.1
+  # suction_tcp is at the cup face: flange + body_length + cup_length along the tool z axis
+  max_gap: 0.008                  # max distance cup face -> box top to allow a grasp
+  max_offset: 0.02                # max lateral offset cup axis -> top-face center
+  max_tilt: 0.15                  # max angle between cup axis and box top normal (rad)
+
+conveyor:
+  length: 3.0
+  belt_width: 0.6
+  belt_top_z: 0.80
+  belt_thickness: 0.05
+  y: 0.80                         # belt centerline
+  x_start: -2.55                  # upstream end (boxes spawn here)
+  x_end: 0.45                     # downstream end (end-stop bumper)
+  speed: 0.25                     # belt surface speed, m/s
+  frame_color: [0.35, 0.37, 0.40, 1.0]
+  belt_color: [0.08, 0.08, 0.08, 1.0]
+
+pick_zone:
+  xyz: [0.0, 0.80, 0.80]          # on the belt surface, centered on the belt
+  stop_window: 0.03               # belt stops when a box center passes x >= pick_x - stop_window
+
+pallet:
+  size: [1.2, 0.8, 0.144]         # EUR pallet
+  center_xy: [0.0, -0.60]
+  mass: 25.0
+  max_stack_height: 1.2           # above the pallet top surface
+  # pallet_origin frame = corner of the pallet's top surface nearest the robot, on the -x side
+  # (computed: x = cx - sx/2, y = cy + sy/2, z = sz), axes aligned with world.
+
+camera:
+  xyz: [0.0, 0.80, 2.30]          # 1.5 m above the belt at the pick zone
+  # camera link looks straight down: +x of the camera link (gz optical axis) points to -z world
+  rpy: [0.0, 1.5708, 0.0]
+  width: 640
+  height: 480
+  hfov: 1.2                       # rad (~69 deg)
+  rate: 15.0                      # Hz
+  near: 0.1
+  far: 4.0
+  mast_xy: [0.0, 1.45]
+  mast_size: [0.08, 0.08, 2.40]
+
+spawner:
+  rate: 0.1                       # boxes per second (0 = only on demand)
+  size_min: [0.2, 0.2, 0.15]
+  size_max: [0.6, 0.6, 0.40]
+  mass_range: [1.0, 10.0]
+  yaw_range: 0.35                 # +/- rad
+  spawn_x: -2.15                  # box center x at spawn
+  clearance: 0.9                  # don't spawn if another box center is within this distance of spawn_x

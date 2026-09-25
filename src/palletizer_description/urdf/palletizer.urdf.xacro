@@ -1,0 +1,89 @@
+<?xml version="1.0"?>
+<!--
+  Palletizing robot: UR10e on a pedestal with a suction gripper.
+  Structure follows ur_simulation_gz/urdf/ur_gz.urdf.xacro.
+  All dimensions come from cell_config.yaml (arg cell_config, required).
+-->
+<robot xmlns:xacro="http://wiki.ros.org/xacro" name="palletizer">
+  <xacro:arg name="cell_config" default=""/>
+  <xacro:arg name="simulation_controllers"
+             default="$(find palletizer_description)/config/controllers.yaml"/>
+  <xacro:arg name="sim_gazebo" default="true"/>
+
+  <xacro:property name="cell" value="${xacro.load_yaml('$(arg cell_config)')}"/>
+  <xacro:property name="ur_type" value="${cell['robot']['ur_type']}"/>
+  <xacro:property name="ped" value="${cell['robot']['pedestal']}"/>
+  <xacro:property name="home" value="${cell['robot']['home']}"/>
+
+  <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
+  <xacro:include filename="$(find palletizer_description)/urdf/suction_gripper.xacro"/>
+  <xacro:include filename="$(find palletizer_description)/urdf/palletizer.ros2_control.xacro"/>
+
+  <link name="world"/>
+
+  <!-- Pedestal: solid steel-ish box, UR base bolted on top -->
+  <xacro:property name="ped_sx" value="${ped['size'][0]}"/>
+  <xacro:property name="ped_sy" value="${ped['size'][1]}"/>
+  <xacro:property name="ped_sz" value="${ped['size'][2]}"/>
+  <xacro:property name="ped_m" value="${ped['mass']}"/>
+  <link name="pedestal">
+    <visual>
+      <origin xyz="0 0 ${ped_sz / 2}"/>
+      <geometry><box size="${ped_sx} ${ped_sy} ${ped_sz}"/></geometry>
+      <material name="pedestal_grey"><color rgba="0.25 0.27 0.3 1"/></material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 ${ped_sz / 2}"/>
+      <geometry><box size="${ped_sx} ${ped_sy} ${ped_sz}"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 ${ped_sz / 2}"/>
+      <mass value="${ped_m}"/>
+      <inertia ixx="${ped_m * (ped_sy * ped_sy + ped_sz * ped_sz) / 12}" ixy="0" ixz="0"
+               iyy="${ped_m * (ped_sx * ped_sx + ped_sz * ped_sz) / 12}" iyz="0"
+               izz="${ped_m * (ped_sx * ped_sx + ped_sy * ped_sy) / 12}"/>
+    </inertial>
+  </link>
+  <joint name="world_to_pedestal" type="fixed">
+    <parent link="world"/>
+    <child link="pedestal"/>
+    <origin xyz="${ped['xy'][0]} ${ped['xy'][1]} 0" rpy="0 0 0"/>
+  </joint>
+
+  <xacro:ur_robot
+    name="ur"
+    tf_prefix=""
+    parent="pedestal"
+    joint_limits_parameters_file="$(find ur_description)/config/${ur_type}/joint_limits.yaml"
+    kinematics_parameters_file="$(find ur_description)/config/${ur_type}/default_kinematics.yaml"
+    physical_parameters_file="$(find ur_description)/config/${ur_type}/physical_parameters.yaml"
+    visual_parameters_file="$(find ur_description)/config/${ur_type}/visual_parameters.yaml"
+    safety_limits="false"
+    force_abs_paths="true">
+    <origin xyz="0 0 ${ped_sz}" rpy="0 0 0"/>
+  </xacro:ur_robot>
+
+  <xacro:suction_gripper parent="tool0" cfg="${cell['gripper']}"/>
+
+  <xacro:if value="$(arg sim_gazebo)">
+    <gazebo>
+      <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+        <parameters>$(arg simulation_controllers)</parameters>
+      </plugin>
+      <plugin filename="palletizer_suction_gripper" name="palletizer_gazebo::SuctionGripper">
+        <link_name>suction_cup</link_name>
+        <model_prefix>box_</model_prefix>
+        <max_gap>${cell['gripper']['max_gap']}</max_gap>
+        <max_offset>${cell['gripper']['max_offset']}</max_offset>
+        <max_tilt>${cell['gripper']['max_tilt']}</max_tilt>
+        <cmd_topic>/suction/cmd</cmd_topic>
+        <grasped_topic>/suction/grasped</grasped_topic>
+        <attached_topic>/suction/attached_model</attached_topic>
+      </plugin>
+    </gazebo>
+  </xacro:if>
+
+  <xacro:palletizer_ros2_control
+    name="ur"
+    initial_positions="${dict(shoulder_pan_joint=home[0], shoulder_lift_joint=home[1], elbow_joint=home[2], wrist_1_joint=home[3], wrist_2_joint=home[4], wrist_3_joint=home[5])}"/>
+</robot>
