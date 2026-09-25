@@ -3,7 +3,10 @@
 # Patterns use the [x] trick so this script never matches its own command line.
 PATTERNS=("[g]z sim" "[g]z_tools_vendor" "[m]ove_group" "[p]arameter_bridge"
           "[r]obot_state_publisher" "[s]tatic_transform_publisher" "[r]viz2"
-          "[c]ontroller_manager/spawner" "[i]nstall/palletizer_" "[b]in/ros2 launch palletizer")
+          "[c]ontroller_manager/spawner" "[b]in/ros2 launch palletizer"
+          "lib/palletizer_[a-z]+/(box_spawner|conveyor_controller|cloud_relay|sim_ops|box_perception|packing_node|motion_server|orchestrator|metrics_logger)")
+# (node executables only: tools such as the benchmark or tests live under install/ too and
+#  must survive this script)
 alive() { for p in "${PATTERNS[@]}"; do pgrep -f "$p" >/dev/null && return 0; done; return 1; }
 for sig in INT TERM KILL; do
   alive || exit 0

@@ -1,0 +1,415 @@
+[INFO] [launch]: All log files can be found below /home/jaisal/.ros/log/2026-09-26-01-04-06-954013-jaisal-Legion-5-16IAX10-443900
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [gazebo-1]: process started with pid [443903]
+[INFO] [create-2]: process started with pid [443904]
+[INFO] [robot_state_publisher-3]: process started with pid [443905]
+[INFO] [parameter_bridge-4]: process started with pid [443906]
+[INFO] [cloud_relay-5]: process started with pid [443908]
+[INFO] [spawner-6]: process started with pid [443909]
+[INFO] [static_transform_publisher-7]: process started with pid [443912]
+[INFO] [static_transform_publisher-8]: process started with pid [443913]
+[INFO] [static_transform_publisher-9]: process started with pid [443914]
+[INFO] [static_transform_publisher-10]: process started with pid [443915]
+[INFO] [conveyor_controller-11]: process started with pid [443916]
+[INFO] [sim_ops-12]: process started with pid [443919]
+[INFO] [box_perception-13]: process started with pid [443920]
+[INFO] [packing_node-14]: process started with pid [443921]
+[INFO] [metrics_logger-15]: process started with pid [443922]
+[robot_state_publisher-3] [INFO] [1790364847.338579983] [robot_state_publisher]: Robot initialized
+[static_transform_publisher-10] [INFO] [1790364847.341973852] [overhead_camera_optical_tf]: Spinning until stopped - publishing transform
+[static_transform_publisher-10] translation: ('0.000000', '0.000000', '0.000000')
+[static_transform_publisher-10] rotation: ('-0.500000', '0.500000', '-0.500000', '0.500000')
+[static_transform_publisher-10] from 'overhead_camera_link' to 'overhead_camera_optical_frame'
+[static_transform_publisher-7] [INFO] [1790364847.342040222] [pick_zone_tf]: Spinning until stopped - publishing transform
+[static_transform_publisher-7] translation: ('0.000000', '0.800000', '0.800000')
+[static_transform_publisher-7] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-7] from 'world' to 'pick_zone'
+[static_transform_publisher-9] [INFO] [1790364847.342159755] [overhead_camera_tf]: Spinning until stopped - publishing transform
+[static_transform_publisher-9] translation: ('0.000000', '0.800000', '2.300000')
+[static_transform_publisher-9] rotation: ('0.000000', '0.707108', '0.000000', '0.707105')
+[static_transform_publisher-9] from 'world' to 'overhead_camera_link'
+[static_transform_publisher-8] [INFO] [1790364847.343178861] [pallet_origin_tf]: Spinning until stopped - publishing transform
+[static_transform_publisher-8] translation: ('-0.600000', '-0.200000', '0.144000')
+[static_transform_publisher-8] rotation: ('0.000000', '0.000000', '0.000000', '1.000000')
+[static_transform_publisher-8] from 'world' to 'pallet_origin'
+[create-2] [INFO] [1790364847.357839017] [ros_gz_sim]: Requesting list of world names.
+[gazebo-1] [1;32m[Msg] [0m[1;32mGazebo Sim Server v[0m[1;32m8.11.0[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mLoading SDF world file[[0m[1;32m/tmp/palletizer/palletizing_cell.sdf[0m[1;32m].[0m
+[gazebo-1] [1;33mWarning [Utils.cc:132][0m [/sdf/world[@name="palletizing_cell"]/model[@name="photo_eyes"]/link[@name="eye_infeed"]/sensor[@name="eye_infeed"]/gz_frame_id:/tmp/palletizer/palletizing_cell.sdf:L6]: XML Element[gz_frame_id], child of element[sensor], not defined in SDF. Copying[gz_frame_id] as children of [sensor].
+[gazebo-1] [1;33mWarning [Utils.cc:132][0m [/sdf/world[@name="palletizing_cell"]/model[@name="photo_eyes"]/link[@name="eye_accum"]/sensor[@name="eye_accum"]/gz_frame_id:/tmp/palletizer/palletizing_cell.sdf:L6]: XML Element[gz_frame_id], child of element[sensor], not defined in SDF. Copying[gz_frame_id] as children of [sensor].
+[gazebo-1] [1;33mWarning [Utils.cc:132][0m [/sdf/world[@name="palletizing_cell"]/model[@name="photo_eyes"]/link[@name="eye_pick"]/sensor[@name="eye_pick"]/gz_frame_id:/tmp/palletizer/palletizing_cell.sdf:L6]: XML Element[gz_frame_id], child of element[sensor], not defined in SDF. Copying[gz_frame_id] as children of [sensor].
+[gazebo-1] [1;33mWarning [Utils.cc:132][0m [/sdf/world[@name="palletizing_cell"]/model[@name="camera_mast"]/link[@name="overhead_camera_link"]/sensor[@name="overhead_rgbd"]/gz_frame_id:/tmp/palletizer/palletizing_cell.sdf:L6]: XML Element[gz_frame_id], child of element[sensor], not defined in SDF. Copying[gz_frame_id] as children of [sensor].
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing entity system service on [[0m[1;32m/[0m[1;32mentity/system/add[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mCreate[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/create_multiple[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mCreate[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/create_multiple/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mRemove[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/remove[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mRemove[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/remove/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPose[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_pose[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPose[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_pose/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPose[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_pose_vector[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPose[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_pose_vector/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mLight configuration[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/light_config[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mLight configuration[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/light_config/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPhysics[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_physics[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPhysics[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_physics/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mSphericalCoordinates[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_spherical_coordinates[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mSphericalCoordinates[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/set_spherical_coordinates/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mEnable collision[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/enable_collision[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mEnable collision[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/enable_collision/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mDisable collision[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/disable_collision[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mDisable collision[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/disable_collision/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mMaterial[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/visual_config[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mMaterial[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/visual_config/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mMaterial[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/wheel_slip[0m[1;32m] (async)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mMaterial[0m[1;32m service on [[0m[1;32m/world/palletizing_cell/wheel_slip/blocking[0m[1;32m] (blocking)[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mLoaded level [[0m[1;32mdefault[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing world controls on [[0m[1;32m/world/palletizing_cell[0m[1;32m/control], [[0m[1;32m/world/palletizing_cell[0m[1;32m/control/state] and [[0m[1;32m/world/palletizing_cell[0m[1;32m/playback/control][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing GUI information on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mgui/info[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mWorld [[0m[1;32mpalletizing_cell[0m[1;32m] initialized with [[0m[1;32m1ms[0m[1;32m] physics profile.[0m[1;32m[0m
+[spawner-6] [INFO] [1790364847.713396312] [spawner_joint_state_broadcaster]: waiting for service /controller_manager/list_controllers to become available...
+[conveyor_controller-11] [INFO] [1790364847.737280635] [conveyor_controller]: conveyor_controller ready: zones ['infeed', 'accum', 'pick'], speed 0.25 m/s
+[metrics_logger-15] [INFO] [1790364847.765756304] [metrics_logger]: metrics -> /home/jaisal/palletizer_ws/results/bench_naive_seed2_boxes.csv, /home/jaisal/palletizer_ws/results/bench_naive_seed2_pallets.csv
+[sim_ops-12] [INFO] [1790364847.779017504] [sim_ops]: sim_ops ready
+[create-2] [INFO] [1790364847.804202875] [ros_gz_sim]: Entity creation successful.
+[packing_node-14] [INFO] [1790364847.845119001] [packing]: packing ready: planner naive, max stack height 1.05 m (reachability map), physics off
+[box_perception-13] [INFO] [1790364847.902392695] [box_perception]: box_perception ready
+[INFO] [create-2]: process has finished cleanly [pid 443904]
+[parameter_bridge-4] [INFO] [1790364848.365355125] [gz_bridge]: Creating GZ->ROS Bridge: [/clock (gz.msgs.Clock) -> /clock (rosgraph_msgs/msg/Clock)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.366490088] [gz_bridge]: Creating GZ->ROS Bridge: [/overhead_camera/image (gz.msgs.Image) -> /overhead_camera/image (sensor_msgs/msg/Image)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.369448603] [gz_bridge]: Creating GZ->ROS Bridge: [/overhead_camera/depth_image (gz.msgs.Image) -> /overhead_camera/depth_image (sensor_msgs/msg/Image)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.370072283] [gz_bridge]: Creating GZ->ROS Bridge: [/overhead_camera/points (gz.msgs.PointCloudPacked) -> /overhead_camera/points_raw (sensor_msgs/msg/PointCloud2)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.370831282] [gz_bridge]: Creating GZ->ROS Bridge: [/overhead_camera/camera_info (gz.msgs.CameraInfo) -> /overhead_camera/camera_info (sensor_msgs/msg/CameraInfo)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.371595836] [gz_bridge]: Creating GZ->ROS Bridge: [/sim/model_poses (gz.msgs.Pose_V) -> /sim/box_poses (tf2_msgs/msg/TFMessage)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.373725498] [gz_bridge]: Creating ROS->GZ Bridge: [/conveyor/infeed/cmd_vel (std_msgs/msg/Float64) -> /model/conveyor/link/belt_infeed/track_cmd_vel (gz.msgs.Double)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.374658660] [gz_bridge]: Creating GZ->ROS Bridge: [/conveyor/eye_infeed (gz.msgs.LaserScan) -> /conveyor/infeed/eye (sensor_msgs/msg/LaserScan)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.375339599] [gz_bridge]: Creating ROS->GZ Bridge: [/conveyor/accum/cmd_vel (std_msgs/msg/Float64) -> /model/conveyor/link/belt_accum/track_cmd_vel (gz.msgs.Double)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.375701271] [gz_bridge]: Creating GZ->ROS Bridge: [/conveyor/eye_accum (gz.msgs.LaserScan) -> /conveyor/accum/eye (sensor_msgs/msg/LaserScan)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.376027662] [gz_bridge]: Creating ROS->GZ Bridge: [/conveyor/pick/cmd_vel (std_msgs/msg/Float64) -> /model/conveyor/link/belt_pick/track_cmd_vel (gz.msgs.Double)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.376344048] [gz_bridge]: Creating GZ->ROS Bridge: [/conveyor/eye_pick (gz.msgs.LaserScan) -> /conveyor/pick/eye (sensor_msgs/msg/LaserScan)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.376663056] [gz_bridge]: Creating ROS->GZ Bridge: [/suction/cmd (std_msgs/msg/Bool) -> /suction/cmd (gz.msgs.Boolean)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.377044652] [gz_bridge]: Creating GZ->ROS Bridge: [/suction/grasped (gz.msgs.Boolean) -> /suction/grasped (std_msgs/msg/Bool)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.377357863] [gz_bridge]: Creating GZ->ROS Bridge: [/suction/wrench (gz.msgs.Wrench) -> /suction/wrench (geometry_msgs/msg/WrenchStamped)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.377876326] [gz_bridge]: Creating GZ->ROS Bridge: [/suction/attached_model (gz.msgs.StringMsg) -> /suction/attached_model (std_msgs/msg/String)] (Lazy 0)
+[parameter_bridge-4] [INFO] [1790364848.378254513] [gz_bridge]: Creating ROS->GZ service bridge [/world/palletizing_cell/create (ros_gz_interfaces/srv/SpawnEntity -> gz.msgs.EntityFactory/gz.msgs.Boolean)]
+[parameter_bridge-4] [INFO] [1790364848.378973226] [gz_bridge]: Creating ROS->GZ service bridge [/world/palletizing_cell/remove (ros_gz_interfaces/srv/DeleteEntity -> gz.msgs.Entity/gz.msgs.Boolean)]
+[parameter_bridge-4] [INFO] [1790364848.379344759] [gz_bridge]: Creating ROS->GZ service bridge [/world/palletizing_cell/set_pose (ros_gz_interfaces/srv/SetEntityPose -> gz.msgs.Pose/gz.msgs.Boolean)]
+[gazebo-1] [INFO] [1790364849.512069678] [gz_ros_control]: [gz_ros2_control] Fixed joint ['world_to_pedestal'] (Entity='113') is skipped.
+[gazebo-1] [INFO] [1790364849.512121166] [gz_ros_control]: [gz_ros2_control] Fixed joint ['suction_cup_joint'] (Entity='120') is skipped.
+[gazebo-1] [INFO] [1790364849.512612051] [gz_ros_control]: Loading controller_manager
+[gazebo-1] [INFO] [1790364849.518847281] [controller_manager]: Using ROS clock for triggering controller manager cycles.
+[gazebo-1] [INFO] [1790364849.520895486] [controller_manager]: Subscribing to '/robot_description' topic for robot description.
+[gazebo-1] [WARN] [1790364849.522177916] [gz_ros_control]: Waiting RM to load and initialize hardware...
+[gazebo-1] [WARN] [1790364850.520763942] [controller_manager]: Waiting for data on 'robot_description' topic to finish initialization
+[gazebo-1] [INFO] [1790364850.699525907] [controller_manager]: Received robot description from topic.
+[gazebo-1] [INFO] [1790364850.699581897] [controller_manager]: Enforcing command limits is disabled. Command limits from URDF will be ignored.
+[gazebo-1] [INFO] [1790364850.704619821] [gz_ros_control]: The position_proportional_gain has been set to: 0.1
+[gazebo-1] [INFO] [1790364850.704692378] [gz_ros_control]: Loading joint: shoulder_pan_joint
+[gazebo-1] [INFO] [1790364850.704701990] [gz_ros_control]: 	State:
+[gazebo-1] [INFO] [1790364850.704709947] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704729014] [gz_ros_control]: 			 found initial value: -1.570800
+[gazebo-1] [INFO] [1790364850.704738773] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704749503] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704754586] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704759204] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704763879] [gz_ros_control]: 	Command:
+[gazebo-1] [INFO] [1790364850.704767868] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704779030] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704787254] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704797740] [gz_ros_control]: Loading joint: shoulder_lift_joint
+[gazebo-1] [INFO] [1790364850.704801567] [gz_ros_control]: 	State:
+[gazebo-1] [INFO] [1790364850.704804806] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704809340] [gz_ros_control]: 			 found initial value: -1.570800
+[gazebo-1] [INFO] [1790364850.704813415] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704817234] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704820774] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704823688] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704827202] [gz_ros_control]: 	Command:
+[gazebo-1] [INFO] [1790364850.704830407] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704836399] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704841195] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704850485] [gz_ros_control]: Loading joint: elbow_joint
+[gazebo-1] [INFO] [1790364850.704854454] [gz_ros_control]: 	State:
+[gazebo-1] [INFO] [1790364850.704857380] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704864361] [gz_ros_control]: 			 found initial value: 1.570800
+[gazebo-1] [INFO] [1790364850.704867762] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704870852] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704874224] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704878208] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704881591] [gz_ros_control]: 	Command:
+[gazebo-1] [INFO] [1790364850.704884262] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704890038] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704893881] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704903809] [gz_ros_control]: Loading joint: wrist_1_joint
+[gazebo-1] [INFO] [1790364850.704907422] [gz_ros_control]: 	State:
+[gazebo-1] [INFO] [1790364850.704910321] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704913243] [gz_ros_control]: 			 found initial value: -1.570800
+[gazebo-1] [INFO] [1790364850.704916735] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704919397] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704922522] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704925459] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704930753] [gz_ros_control]: 	Command:
+[gazebo-1] [INFO] [1790364850.704960523] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704966214] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704970170] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.704979042] [gz_ros_control]: Loading joint: wrist_2_joint
+[gazebo-1] [INFO] [1790364850.704982584] [gz_ros_control]: 	State:
+[gazebo-1] [INFO] [1790364850.704985426] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.704988194] [gz_ros_control]: 			 found initial value: -1.570800
+[gazebo-1] [INFO] [1790364850.704991554] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.704994411] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.704997635] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.705000835] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.705003950] [gz_ros_control]: 	Command:
+[gazebo-1] [INFO] [1790364850.705007203] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.705012508] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.705016407] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.705024040] [gz_ros_control]: Loading joint: wrist_3_joint
+[gazebo-1] [INFO] [1790364850.705027206] [gz_ros_control]: 	State:
+[gazebo-1] [INFO] [1790364850.705029965] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.705032868] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.705036266] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.705041353] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.705044633] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.705047811] [gz_ros_control]: 			 found initial value: 0.000000
+[gazebo-1] [INFO] [1790364850.705050817] [gz_ros_control]: 	Command:
+[gazebo-1] [INFO] [1790364850.705053808] [gz_ros_control]: 		 position
+[gazebo-1] [INFO] [1790364850.705058655] [gz_ros_control]: 		 velocity
+[gazebo-1] [INFO] [1790364850.705064896] [gz_ros_control]: 		 effort
+[gazebo-1] [INFO] [1790364850.705169390] [gz_ros_control]: Loading sensor: suction_ft
+[gazebo-1] [INFO] [1790364850.705173610] [gz_ros_control]: 	State:
+[gazebo-1] [WARN] [1790364850.705177517] [gz_ros_control]: ForceTorque sensor 'suction_ft' not found in hardware_info, skipping.
+[gazebo-1] [INFO] [1790364850.705274184] [controller_manager]: Initialize hardware 'ur' 
+[gazebo-1] [WARN] [1790364850.705294765] [controller_manager.hardware_component.system.ur]: Executor is not available during hardware component initialization for 'ur'. Skipping node creation!
+[gazebo-1] [INFO] [1790364850.705387565] [controller_manager]: Successful initialization of hardware 'ur'
+[gazebo-1] [INFO] [1790364850.705609966] [controller_manager]: Activating component 'ur'.
+[gazebo-1] [INFO] [1790364850.705622054] [resource_manager]: 'configure' hardware 'ur' 
+[gazebo-1] [INFO] [1790364850.705627389] [gz_ros_control]: System Successfully configured!
+[gazebo-1] [INFO] [1790364850.705632568] [resource_manager]: Successful 'configure' of hardware 'ur'
+[gazebo-1] [INFO] [1790364850.705644794] [resource_manager]: 'activate' hardware 'ur' 
+[gazebo-1] [INFO] [1790364850.705660792] [resource_manager]: Successful 'activate' of hardware 'ur'
+[gazebo-1] [WARN] [1790364850.705775367] [controller_manager]: Component 'ur' does not have read or write statistics initialized, skipping registration.
+[gazebo-1] [INFO] [1790364850.705784385] [controller_manager]: Resource Manager has been successfully initialized. Starting Controller Manager services...
+[gazebo-1] [INFO] [1790364850.717222856] [controller_manager]: Loading controller : 'joint_state_broadcaster' of type 'joint_state_broadcaster/JointStateBroadcaster'
+[gazebo-1] [INFO] [1790364850.717246324] [controller_manager]: Loading controller 'joint_state_broadcaster'
+[gazebo-1] [INFO] [1790364850.719521989] [controller_manager]: Controller 'joint_state_broadcaster' node arguments: --ros-args --params-file /home/jaisal/palletizer_ws/install/palletizer_description/share/palletizer_description/config/controllers.yaml -p use_sim_time:=true --param use_sim_time:=true 
+[spawner-6] [INFO] [1790364850.724876540] [spawner_joint_state_broadcaster]: Loaded joint_state_broadcaster
+[gazebo-1] [INFO] [1790364850.725381394] [controller_manager]: Configuring controller: 'joint_state_broadcaster'
+[gazebo-1] [INFO] [1790364850.725464089] [joint_state_broadcaster]: 'joints' or 'interfaces' parameter is empty. All available state interfaces will be published
+[gazebo-1] [INFO] [1790364850.731341013] [controller_manager]: Activating controllers: [ joint_state_broadcaster ]
+[gazebo-1] [WARN] [1790364851.554469688] [gz_ros_control]:  Desired controller update period (0.002 s) is slower than the gazebo simulation period (0.001 s).
+[gazebo-1] [INFO] [1790364851.555080008] [controller_manager]: Successfully switched controllers!
+WARNING:root:[33;21mCannot infer URDF from `/home/jaisal/palletizer_ws/install/palletizer_moveit_config/share/palletizer_moveit_config`. -- using config/palletizer.urdf[0m
+WARNING:root:[33;21mCannot infer SRDF from `/home/jaisal/palletizer_ws/install/palletizer_moveit_config/share/palletizer_moveit_config`. -- using config/palletizer.srdf[0m
+[INFO] [move_group-16]: process started with pid [444260]
+[INFO] [motion_server-17]: process started with pid [444261]
+[move_group-16] [INFO] [1790364852.444537860] [move_group.moveit.moveit.ros.rdf_loader]: Loaded robot model in 0 seconds
+[move_group-16] [INFO] [1790364852.444623098] [move_group.moveit.moveit.core.robot_model]: Loading robot model 'palletizer'...
+[move_group-16] [INFO] [1790364852.444633179] [move_group.moveit.moveit.core.robot_model]: No root/virtual joint specified in SRDF. Assuming fixed joint
+[move_group-16] [INFO] [1790364852.452571532] [move_group.moveit.moveit.kinematics.kdl_kinematics_plugin]: Joint weights for group 'manipulator': 1 1 1 1 1 1
+[move_group-16] [INFO] [1790364852.498927884] [move_group.moveit.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-16] [INFO] [1790364852.499035780] [move_group.moveit.moveit.ros.moveit_cpp]: Listening to 'joint_states' for joint states
+[move_group-16] [INFO] [1790364852.499606160] [move_group.moveit.moveit.ros.current_state_monitor]: Listening to joint states on topic 'joint_states'
+[move_group-16] [INFO] [1790364852.499857167] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to '/attached_collision_object' for attached collision objects
+[move_group-16] [INFO] [1790364852.499868996] [move_group.moveit.moveit.ros.planning_scene_monitor]: Stopping existing planning scene publisher.
+[move_group-16] [INFO] [1790364852.500311641] [move_group.moveit.moveit.ros.planning_scene_monitor]: Stopped publishing maintained planning scene.
+[move_group-16] [INFO] [1790364852.500554805] [move_group.moveit.moveit.ros.planning_scene_monitor]: Publishing maintained planning scene on 'monitored_planning_scene'
+[move_group-16] [INFO] [1790364852.500599689] [move_group.moveit.moveit.ros.planning_scene_monitor]: Starting planning scene monitor
+[move_group-16] [INFO] [1790364852.500798227] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to '/planning_scene'
+[move_group-16] [INFO] [1790364852.500804794] [move_group.moveit.moveit.ros.planning_scene_monitor]: Starting world geometry update monitor for collision objects, attached objects, octomap updates.
+[move_group-16] [INFO] [1790364852.501325602] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to 'collision_object'
+[move_group-16] [INFO] [1790364852.501490609] [move_group.moveit.moveit.ros.planning_scene_monitor]: Listening to 'planning_scene_world' for planning scene world geometry
+[move_group-16] [WARN] [1790364852.501626146] [move_group.moveit.moveit.ros.occupancy_map_monitor]: Resolution not specified for Octomap. Assuming resolution = 0.1 instead
+[move_group-16] [ERROR] [1790364852.501634673] [move_group.moveit.moveit.ros.occupancy_map_monitor]: No 3D sensor plugin(s) defined for octomap updates
+[move_group-16] [INFO] [1790364852.505619838] [move_group.moveit.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-16] [INFO] [1790364852.506753876] [move_group.moveit.moveit.planners.pilz.command_planner]: Available plugins: pilz_industrial_motion_planner/PlanningContextLoaderCIRC pilz_industrial_motion_planner/PlanningContextLoaderLIN pilz_industrial_motion_planner/PlanningContextLoaderPTP 
+[move_group-16] [INFO] [1790364852.506766872] [move_group.moveit.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderCIRC
+[move_group-16] [INFO] [1790364852.507420271] [move_group.moveit.moveit.planners.pilz.command_planner]: Registered Algorithm [CIRC]
+[move_group-16] [INFO] [1790364852.507428618] [move_group.moveit.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderLIN
+[move_group-16] [INFO] [1790364852.507850451] [move_group.moveit.moveit.planners.pilz.command_planner]: Registered Algorithm [LIN]
+[move_group-16] [INFO] [1790364852.507856015] [move_group.moveit.moveit.planners.pilz.command_planner]: About to load: pilz_industrial_motion_planner/PlanningContextLoaderPTP
+[move_group-16] [INFO] [1790364852.508255412] [move_group.moveit.moveit.planners.pilz.command_planner]: Registered Algorithm [PTP]
+[move_group-16] [INFO] [1790364852.508262253] [move_group.moveit.moveit.ros.planning_pipeline]: Successfully loaded planner 'Pilz Industrial Motion Planner'
+[move_group-16] [INFO] [1790364852.508673023] [move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-16] [INFO] [1790364852.509083812] [move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-16] [INFO] [1790364852.509087274] [move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-16] [INFO] [1790364852.509155626] [move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-16] [INFO] [1790364852.509158418] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-16] [INFO] [1790364852.509166807] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-16] [INFO] [1790364852.509168586] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-16] [INFO] [1790364852.509176156] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-16] [INFO] [1790364852.509559110] [move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-16] [INFO] [1790364852.511592227] [move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-16] [INFO] [1790364852.511602151] [move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-16] [INFO] [1790364852.511869613] [move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-16] [INFO] [1790364852.518294090] [move_group.moveit.moveit.ros.planning_pipeline]: Successfully loaded planner 'OMPL'
+[move_group-16] [INFO] [1790364852.518715021] [move_group]: Try loading adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-16] [INFO] [1790364852.518752116] [move_group]: Loaded adapter 'default_planning_request_adapters/ResolveConstraintFrames'
+[move_group-16] [INFO] [1790364852.518754488] [move_group]: Try loading adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-16] [INFO] [1790364852.518812905] [move_group]: Loaded adapter 'default_planning_request_adapters/ValidateWorkspaceBounds'
+[move_group-16] [INFO] [1790364852.518815198] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-16] [INFO] [1790364852.518823003] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateBounds'
+[move_group-16] [INFO] [1790364852.518825063] [move_group]: Try loading adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-16] [INFO] [1790364852.518830057] [move_group]: Loaded adapter 'default_planning_request_adapters/CheckStartStateCollision'
+[move_group-16] [INFO] [1790364852.519206494] [move_group]: Try loading adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-16] [INFO] [1790364852.519319332] [move_group]: Loaded adapter 'default_planning_response_adapters/AddTimeOptimalParameterization'
+[move_group-16] [INFO] [1790364852.519330807] [move_group]: Try loading adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-16] [INFO] [1790364852.519507455] [move_group]: Loaded adapter 'default_planning_response_adapters/ValidateSolution'
+[move_group-16] [INFO] [1790364852.519511592] [move_group]: Try loading adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-16] [INFO] [1790364852.519630913] [move_group]: Loaded adapter 'default_planning_response_adapters/DisplayMotionPath'
+[move_group-16] [INFO] [1790364852.529259839] [move_group.moveit.moveit.plugins.simple_controller_manager]: Added FollowJointTrajectory controller for joint_trajectory_controller
+[move_group-16] [INFO] [1790364852.529358305] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364852.529371623] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364852.529569129] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Trajectory execution is managing controllers
+[move_group-16] [INFO] [1790364852.529577025] [move_group]: MoveGroup debug mode is ON
+[move_group-16] [INFO] [1790364852.543496693] [move_group.moveit.moveit.planners.pilz.move_group_sequence_action]: initialize move group sequence action
+[move_group-16] [INFO] [1790364852.545064598] [move_group.moveit.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-16] [INFO] [1790364852.545181080] [move_group.moveit.moveit.planners.pilz.joint_limits_aggregator]: Reading limits from namespace robot_description_planning
+[move_group-16] [INFO] [1790364852.545618255] [move_group.moveit.moveit.ros.move_group.executable]: 
+[move_group-16] 
+[move_group-16] ********************************************************
+[move_group-16] * MoveGroup using: 
+[move_group-16] *     - apply_planning_scene_service
+[move_group-16] *     - clear_octomap_service
+[move_group-16] *     - get_group_urdf
+[move_group-16] *     - load_geometry_from_file
+[move_group-16] *     - CartesianPathService
+[move_group-16] *     - execute_trajectory_action
+[move_group-16] *     - get_planning_scene_service
+[move_group-16] *     - kinematics_service
+[move_group-16] *     - move_action
+[move_group-16] *     - motion_plan_service
+[move_group-16] *     - query_planners_service
+[move_group-16] *     - state_validation_service
+[move_group-16] *     - save_geometry_to_file
+[move_group-16] *     - SequenceAction
+[move_group-16] *     - SequenceService
+[move_group-16] ********************************************************
+[move_group-16] 
+[move_group-16] [INFO] [1790364852.545642626] [move_group.moveit.moveit.ros.move_group.context]: MoveGroup context using pipeline pilz_industrial_motion_planner
+[move_group-16] [INFO] [1790364852.545649542] [move_group.moveit.moveit.ros.move_group.context]: MoveGroup context initialization complete
+[motion_server-17] [INFO] [1790364853.964302811] [motion_server]: static planning scene applied: True; motion_server ready
+[gazebo-1] libEGL warning: pci id for fd 109: 10de:2d59, driver (null)
+[gazebo-1] 
+[gazebo-1] pci id for fd 111: 10de:2d59, driver (null)
+[gazebo-1] pci id for fd 112: 10de:2d59, driver (null)
+[gazebo-1] libEGL warning: egl: failed to create dri2 screen
+[gazebo-1] libEGL warning: pci id for fd 109: 10de:2d59, driver (null)
+[gazebo-1] 
+[gazebo-1] pci id for fd 111: 10de:2d59, driver (null)
+[gazebo-1] pci id for fd 112: 10de:2d59, driver (null)
+[gazebo-1] libEGL warning: egl: failed to create dri2 screen
+[gazebo-1] libEGL warning: pci id for fd 109: 10de:2d59, driver (null)
+[gazebo-1] 
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing world SDF generation service on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mgenerate_world_sdf[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing world names on [[0m[1;32m/gazebo/worlds[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mResource path add service on [[0m[1;32m/gazebo/resource_paths/add[0m[1;32m].[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mResource path get service on [[0m[1;32m/gazebo/resource_paths/get[0m[1;32m].[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mResource path resolve service on [[0m[1;32m/gazebo/resource_paths/resolve[0m[1;32m].[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mResource paths published on [[0m[1;32m/gazebo/resource_paths[0m[1;32m].[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServer control service on [[0m[1;32m/server_control[0m[1;32m].[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mFound no publishers on /stats, adding root stats topic[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mFound no publishers on /clock, adding root clock topic[0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32m[SuctionGripper] link [[0m[1;32msuction_cup[0m[1;32m], prefix [[0m[1;32mbox_[0m[1;32m], max_gap [0m[1;32m0.008[0m[1;32m, max_offset [0m[1;32m0.02[0m[1;32m, cmd [[0m[1;32m/suction/cmd[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mEnabled contact surface customization for world entity [[0m[1;32m1[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mEnabling contact surface customization for collision [[0m[1;32mbelt_collision[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mEnabling contact surface customization for collision [[0m[1;32mbelt_collision[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mEnabling contact surface customization for collision [[0m[1;32mbelt_collision[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mLoading plugin [[0m[1;32mgz-rendering-ogre2[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing scene information on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mscene/info[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing graph information on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mscene/graph[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing full state on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mstate[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mServing full state (async) on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mstate_async[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPublishing scene information on [[0m[1;32m/world/palletizing_cell/scene/info[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPublishing entity deletions on [[0m[1;32m/world/palletizing_cell/scene/deletion[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPublishing state changes on [[0m[1;32m/world/palletizing_cell/state[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPublishing pose messages on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mpose/info[0m[1;32m][0m[1;32m[0m
+[gazebo-1] [1;32m[Msg] [0m[1;32mPublishing dynamic pose messages on [[0m[1;32m/world/palletizing_cell[0m[1;32m/[0m[1;32mdynamic_pose/info[0m[1;32m][0m[1;32m[0m
+[spawner-6] [INFO] [1790364854.597564527] [spawner_joint_state_broadcaster]: Configured and activated joint_state_broadcaster
+[parameter_bridge-4] [INFO] [1790364854.612701514] [gz_bridge]: Passing message from ROS std_msgs/msg/Float64 to Gazebo gz.msgs.Double (showing msg only once per type)
+[INFO] [spawner-6]: process has finished cleanly [pid 443909]
+[INFO] [spawner-18]: process started with pid [444455]
+[spawner-18] [INFO] [1790364855.123739680] [spawner_joint_trajectory_controller]: waiting for service /controller_manager/list_controllers to become available...
+[INFO] [box_spawner-19]: process started with pid [444496]
+[gazebo-1] [INFO] [1790364855.375454979] [controller_manager]: Loading controller : 'joint_trajectory_controller' of type 'joint_trajectory_controller/JointTrajectoryController'
+[gazebo-1] [INFO] [1790364855.375497767] [controller_manager]: Loading controller 'joint_trajectory_controller'
+[gazebo-1] [INFO] [1790364855.380003524] [controller_manager]: Controller 'joint_trajectory_controller' node arguments: --ros-args --params-file /home/jaisal/palletizer_ws/install/palletizer_description/share/palletizer_description/config/controllers.yaml -p use_sim_time:=true --param use_sim_time:=true 
+[spawner-18] [INFO] [1790364855.398920140] [spawner_joint_trajectory_controller]: Loaded joint_trajectory_controller
+[gazebo-1] [INFO] [1790364855.399950220] [controller_manager]: Configuring controller: 'joint_trajectory_controller'
+[gazebo-1] [INFO] [1790364855.400157701] [joint_trajectory_controller]: No specific joint names are used for command interfaces. Using 'joints' parameter.
+[gazebo-1] [INFO] [1790364855.400186147] [joint_trajectory_controller]: Command interfaces are [position] and state interfaces are [position velocity].
+[gazebo-1] [INFO] [1790364855.400216211] [joint_trajectory_controller]: Using 'splines' interpolation method.
+[gazebo-1] [INFO] [1790364855.403449603] [joint_trajectory_controller]: Action status changes will be monitored at 20.00 Hz.
+[gazebo-1] [INFO] [1790364855.410112194] [joint_trajectory_controller]: Setting initial scaling factor to 1.000000
+[gazebo-1] [INFO] [1790364855.410139757] [joint_trajectory_controller]: No scaling interface set. This controller will not read speed scaling from the hardware.
+[gazebo-1] [INFO] [1790364855.413543003] [controller_manager]: Activating controllers: [ joint_trajectory_controller ]
+[gazebo-1] [INFO] [1790364855.414120827] [controller_manager]: Successfully switched controllers!
+[spawner-18] [INFO] [1790364855.416969030] [spawner_joint_trajectory_controller]: Configured and activated joint_trajectory_controller
+[INFO] [spawner-18]: process has finished cleanly [pid 444455]
+[box_spawner-19] [INFO] [1790364855.809181337] [box_spawner]: box_spawner ready (rate 0.5/s, seed 2, max_boxes 0)
+[box_spawner-19] [INFO] [1790364856.782320519] [box_spawner]: spawned box_0001: 0.305x0.319x0.354 m, 1.83 kg, yaw +5.0 deg
+[INFO] [orchestrator-20]: process started with pid [444580]
+[orchestrator-20] [INFO] [1790364857.377853273] [orchestrator]: waiting for perception, packing and motion servers...
+[orchestrator-20] [INFO] [1790364858.673708197] [orchestrator]: tree loaded (/home/jaisal/palletizer_ws/install/palletizer_orchestrator/share/palletizer_orchestrator/trees/palletize.xml); Groot2 on port 1667; planner naive
+[move_group-16] [INFO] [1790364858.731937759] [move_group.moveit.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[move_group-16] [INFO] [1790364858.732293256] [move_group.moveit.moveit.ros.move_group.move_action]: executing..
+[move_group-16] [INFO] [1790364858.733428507] [move_group.moveit.moveit.ros.move_group.move_action]: Combined planning and execution request received for MoveGroup action. Forwarding to planning and execution pipeline.
+[move_group-16] [INFO] [1790364858.733559199] [move_group.moveit.moveit.ros.plan_execution]: Planning attempt 1 of at most 1
+[move_group-16] [INFO] [1790364858.733610714] [move_group.moveit.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-16] [INFO] [1790364858.733904310] [move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-16] [INFO] [1790364858.733930230] [move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-16] [WARN] [1790364858.733936568] [move_group.moveit.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-16] [INFO] [1790364858.733951869] [move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-16] [INFO] [1790364858.733981258] [move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-16] [INFO] [1790364858.734227278] [move_group.moveit.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-16] [INFO] [1790364858.734260185] [move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-16] [INFO] [1790364858.734296791] [move_group.moveit.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-16] [INFO] [1790364858.734720631] [move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-16] [INFO] [1790364858.734908777] [move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-16] [INFO] [1790364858.735058133] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364858.735078475] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364858.735168453] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.02
+[move_group-16] [INFO] [1790364858.735464070] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-16] [INFO] [1790364858.735559947] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364858.735583814] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364858.735851339] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to joint_trajectory_controller
+[gazebo-1] [INFO] [1790364858.736296512] [joint_trajectory_controller]: Received new action goal
+[gazebo-1] [INFO] [1790364858.736376194] [joint_trajectory_controller]: Accepted new action goal
+[move_group-16] [INFO] [1790364858.736534381] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: joint_trajectory_controller started execution
+[move_group-16] [INFO] [1790364858.736555965] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[box_spawner-19] [INFO] [1790364859.253810569] [box_spawner]: spawned box_0002: 0.310x0.463x0.291 m, 2.35 kg, yaw -3.4 deg
+[gazebo-1] [INFO] [1790364859.783296717] [joint_trajectory_controller]: Goal reached, success!
+[move_group-16] [INFO] [1790364859.786983022] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'joint_trajectory_controller' successfully finished
+[move_group-16] [INFO] [1790364859.787408464] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-16] [INFO] [1790364859.795610117] [move_group.moveit.moveit.ros.move_group.move_action]: Solution was found and executed.
+[move_group-16] [INFO] [1790364859.860802872] [move_group.moveit.moveit.ros.move_group.move_action]: MoveGroupMoveAction: Received request
+[move_group-16] [INFO] [1790364859.861026511] [move_group.moveit.moveit.ros.move_group.move_action]: executing..
+[move_group-16] [INFO] [1790364859.864911985] [move_group.moveit.moveit.ros.move_group.move_action]: Combined planning and execution request received for MoveGroup action. Forwarding to planning and execution pipeline.
+[move_group-16] [INFO] [1790364859.864985894] [move_group.moveit.moveit.ros.plan_execution]: Planning attempt 1 of at most 1
+[move_group-16] [INFO] [1790364859.865044067] [move_group.moveit.moveit.ros.move_group.capability]: Using planning pipeline 'pilz_industrial_motion_planner'
+[move_group-16] [INFO] [1790364859.865200026] [move_group]: Calling PlanningRequestAdapter 'ResolveConstraintFrames'
+[move_group-16] [INFO] [1790364859.865218840] [move_group]: Calling PlanningRequestAdapter 'ValidateWorkspaceBounds'
+[move_group-16] [WARN] [1790364859.865224495] [move_group.moveit.moveit.ros.validate_workspace_bounds]: It looks like the planning volume was not specified. Using default values.
+[move_group-16] [INFO] [1790364859.865239210] [move_group]: Calling PlanningRequestAdapter 'CheckStartStateBounds'
+[move_group-16] [INFO] [1790364859.865255769] [move_group]: Calling PlanningRequestAdapter 'CheckStartStateCollision'
+[move_group-16] [INFO] [1790364859.865341535] [move_group.moveit.moveit.planners.pilz.trajectory_generator.ptp]: Initialized Point-to-Point Trajectory Generator.
+[move_group-16] [INFO] [1790364859.865365742] [move_group]: Calling Planner 'Pilz Industrial Motion Planner'
+[move_group-16] [INFO] [1790364859.865377376] [move_group.moveit.moveit.planners.pilz.trajectory_generator]: Generating PTP trajectory...
+[move_group-16] [INFO] [1790364859.865551859] [move_group]: Calling PlanningResponseAdapter 'ValidateSolution'
+[move_group-16] [INFO] [1790364859.865709418] [move_group]: Calling PlanningResponseAdapter 'DisplayMotionPath'
+[move_group-16] [INFO] [1790364859.865821621] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364859.865840605] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364859.865891933] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Validating trajectory with allowed_start_tolerance 0.02
+[move_group-16] [INFO] [1790364859.866733313] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Starting trajectory execution ...
+[move_group-16] [INFO] [1790364859.866798399] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364859.866821711] [move_group.moveit.moveit.plugins.simple_controller_manager]: Returned 1 controllers in list
+[move_group-16] [INFO] [1790364859.867009885] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: sending trajectory to joint_trajectory_controller
+[gazebo-1] [INFO] [1790364859.867206554] [joint_trajectory_controller]: Received new action goal
+[gazebo-1] [INFO] [1790364859.867243634] [joint_trajectory_controller]: Accepted new action goal
+[move_group-16] [INFO] [1790364859.867409652] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: joint_trajectory_controller started execution
+[move_group-16] [INFO] [1790364859.867425163] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Goal request accepted!
+[gazebo-1] [INFO] [1790364860.895278532] [joint_trajectory_controller]: Goal reached, success!
+[move_group-16] [INFO] [1790364860.917645209] [moveit.simple_controller_manager.follow_joint_trajectory_controller_handle]: Controller 'joint_trajectory_controller' successfully finished
+[move_group-16] [INFO] [1790364860.917709783] [move_group.moveit.moveit.ros.trajectory_execution_manager]: Completed trajectory execution with status SUCCEEDED ...
+[move_group-16] [INFO] [1790364860.926839881] [move_group.moveit.moveit.ros.move_group.move_action]: Solution was found and executed.
+[orchestrator-20] [INFO] [1790364860.948254556] [orchestrator]: park: PTP ; PTP 
+[orchestrator-20] [INFO] [1790364860.968651367] [orchestrator]: resume: running

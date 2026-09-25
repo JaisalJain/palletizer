@@ -101,30 +101,34 @@ Raw data: `results/pick_place_test_seed42.csv`.
 | Metric | Result | Threshold | |
 |---|---|---|---|
 | Boxes meeting all criteria | 20/20 | ≥ 19/20 | PASS |
-| Placement position error (top-face centre, 3D), mean / max | 0.28 / 4.96 mm | ≤ 15 mm | PASS |
-| … horizontal only, mean / max | 0.28 / 4.96 mm | | |
-| Yaw error, mean / max | 0.013 / 0.068° | ≤ 3° | PASS |
+| Placement position error (top-face centre, 3D), mean / max | 0.03 / 0.06 mm | ≤ 15 mm | PASS |
+| … horizontal only, mean / max | 0.02 / 0.06 mm | | |
+| Yaw error, mean / max | 0.011 / 0.068° | ≤ 3° | PASS |
 | Max displacement of an already-placed box | 0.00 mm | ≤ 10 mm | PASS |
 | F/T mass error, mean / max | 5 / 10 g | (extra) | |
 
-**How it got there (earlier runs of the same test, kept honest):** the first 20-box run
-scored 13/20. Causes, each fixed at the root rather than by relaxing anything:
-1. PTP from the lift pose to a low pre-place pose swung the carried box through the
-   conveyor/photo-eye → transit via a high hub at the target bearing.
-2. Long vertical LIN lift with the arm stretched up violated elbow deceleration limits
-   (near-singular) → LIN out of the grasp, then joint-space PTP up.
-3. After a failed pick the arm hovered over the pick zone and occluded the next box
-   (detected 16 mm short) → every failure path parks the arm; perception refuses to detect
-   while a robot link (TF) is over the ROI.
-4. MoveIt's wall-clock execution-duration monitor aborted a slow LIN (−6) → disabled; the
-   controller result is authoritative.
-5. Joint-space PTP down to near-edge targets swept the box into a neighbour (one neighbour
-   moved 24.8 mm) → travel at hub height to directly above the target, then vertical LIN.
-6. OMPL fallback aborted (−27): the copied UR `ompl_planning.yaml` had no group entry.
-7. The test driver lacked the BT's held-box recovery, so one failure cascaded.
+**How it got there.** Earlier runs of this test (and of the 3-pallet auto run) failed; every
+cause was fixed at the root, no threshold was touched:
+
+| Symptom (earlier run) | Root cause | Fix |
+|---|---|---|
+| Carried box swept through conveyor/photo-eye (PTP invalid) | joint-space PTP from the lift pose straight to a low pre-place pose | transit via a high hub, then vertical approach |
+| Pilz LIN lift failed (elbow deceleration limit) | long vertical LIN with the arm stretched up (near-singular) | LIN out of the grasp, joint-space PTP up |
+| Next box detected 16 mm short | arm hovering over the pick zone after a failed pick occluded the box | every failure parks the arm; perception refuses while a robot link (TF) is over the ROI |
+| LIN aborted with TIMED_OUT (−6) | MoveIt's wall-clock execution-duration monitor | disabled; the controller result is authoritative |
+| A neighbour moved 24.8 mm | joint-space PTP down to a near-edge target swept the box sideways | travel to directly above the target at hub height, then vertical LIN |
+| OMPL fallback aborted (−27) | copied UR `ompl_planning.yaml` had no group entry | added `manipulator` config |
+| Big boxes measured ~8 mm short | ROI (belt ± 5 cm) clipped boxes overhanging the belt | ROI ± 0.16 m; eval now includes 8 worst-case boxes |
+| Boxes rotated/shifted on the belt, one knocked off | (a) `resume` drove a box still at the pick eye into the end stop; (b) swing branch chosen relative to the current pan drifted 2π until the "+x" route hit the joint limit and the arm swung through the queue | pick zone never runs while its eye is blocked; canonical pan (TCP bearing in (−180°, 180°]) for every routed goal |
+| Two boxes in the pick zone | accumulation zone followed the pick zone whenever it ran | one box per zone (occupancy from eye edges) |
+| Phantom boxes stalled the queue | overhanging boxes within 2 cm of the emitter read as −inf (treated as clear); stopped box edge flickering on the beam | below-min-range = blocked, eye posts 0.12 m out, eye changes ignored on a stopped belt |
+| Placed boxes nudged ~20 mm (collapse detector) | Pilz paths validated only at samples, zero clearance | 1.5 cm robot link padding |
+| "Above target" goal in collision | reaching high over the far side put the upper arm into a tall stack next to the pedestal | choose the highest collision-free above-pose; on place failure re-plan excluding the failed target |
+| Cup 4–5.5 cm off-centre (NO_GRASP) | perception averaged queued frames rendered while the box was still moving | freshness by header stamp (sim time), not arrival |
+| Next run's controllers failed to start | gz/move_group outlived `ros2 launch`; a leftover controller_manager answered | `kill_sim.sh` between runs |
 
 The very small errors reflect the simulator (joint position control, exact kinematics, ideal
-suction attach); placing on the real robot will be dominated by perception and grasp slip.
+suction attach); on a real robot placement will be dominated by perception and grasp slip.
 
 ## Milestone D — Packing
 
@@ -162,6 +166,17 @@ benchmark below.
 ## Milestone E — Autonomous operation
 
 <!-- AUTO3:BEGIN -->
+
+Run `auto3_heuristic` (raw data: `results/auto3_heuristic_*.csv`). Box outcomes: placed 20.
+
+| Pallet | Boxes | Rejected | Fill % | Max height [m] | Collapses | Lost boxes | Duration [s] | Picks/min | Mean planning [ms] | Mean place err [mm] | End |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 0 | 7 | 0 | 36.5 | 0.89 | 0 | 0 | 171 | 2.46 | 271 | 0.06 | full |
+| 1 | 6 | 0 | 22.0 | 0.65 | 0 | 0 | 143 | 2.51 | 236 | 0.02 | full |
+| 2 | 6 | 0 | 24.6 | 0.80 | 0 | 0 | 153 | 2.35 | 125 | 0.05 | full |
+
+Placed boxes: 20; max dimension error 0.28 mm; F/T mass error mean 6 g / max 10 g.
+
 <!-- AUTO3:END -->
 
 ## Milestone E — Benchmark
