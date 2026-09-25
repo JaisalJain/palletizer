@@ -62,6 +62,7 @@ class SimClient(Node):
 
         self.joints = None
         self.box_poses = {}
+        self.box_poses_received = False
         self.grasped = None
         self.attached = None
         self.belt_running = None
@@ -96,6 +97,7 @@ class SimClient(Node):
 
     def _on_boxes(self, msg):
         self.box_poses = boxes.poses_from_tf(msg)
+        self.box_poses_received = True
 
     def _on_grasped(self, msg):
         self.grasped = msg.data
@@ -125,7 +127,9 @@ class SimClient(Node):
         return fut.result()
 
     def wait_ready(self, timeout=60.0):
-        return self.wait_for(lambda: self.joints is not None, timeout)
+        # box poses too, otherwise delete_all_boxes() may see an empty world
+        return self.wait_for(
+            lambda: self.joints is not None and self.box_poses_received, timeout)
 
     # ---------------- controllers / arm ----------------
     def controller_states(self):
