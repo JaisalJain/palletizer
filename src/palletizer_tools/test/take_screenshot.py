@@ -7,6 +7,7 @@ Usage: take_screenshot.py [output.png]
 """
 
 import os
+import signal
 import subprocess
 import sys
 import time
@@ -96,12 +97,13 @@ def main():
     bridge_proc = subprocess.Popen(
         ['ros2', 'run', 'ros_gz_bridge', 'parameter_bridge',
          '/doc_camera/image@sensor_msgs/msg/Image[gz.msgs.Image'],
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     frames = []
     sub = sim.create_subscription(Image, '/doc_camera/image', frames.append, 5)
     ok = sim.wait_for(lambda: len(frames) >= 3, 30.0)
     sim.destroy_subscription(sub)
-    bridge_proc.terminate()
+    os.killpg(bridge_proc.pid, signal.SIGINT)     # ros2 run spawns a child: kill the group
+    bridge_proc.wait(timeout=10)
     if ok:
         img = CvBridge().imgmsg_to_cv2(frames[-1], 'bgr8')
         os.makedirs(os.path.dirname(out), exist_ok=True)

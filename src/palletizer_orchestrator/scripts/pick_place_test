@@ -1,0 +1,4 @@
+#!/usr/bin/env python3
+import sys
+from palletizer_orchestrator.pick_place_test import main
+sys.exit(main())

@@ -24,6 +24,7 @@ setup(
             'box_spawner = palletizer_tools.box_spawner:main',
             'conveyor_controller = palletizer_tools.conveyor_controller:main',
             'cloud_relay = palletizer_tools.cloud_relay:main',
+            'sim_ops = palletizer_tools.sim_ops:main',
         ],
     },
 )

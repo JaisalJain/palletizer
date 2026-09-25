@@ -63,6 +63,7 @@ class MotionServer(Node):
         self.busy = threading.Lock()
         self.held = None            # dict with grasp info while carrying a box
         self.placed_ids = []
+        self.stack_top = self.cell['pallet']['size'][2]   # tallest placed box top (world z)
 
         self.create_subscription(JointState, '/joint_states', self.on_js, 10, callback_group=self.cb)
         self.create_subscription(Bool, '/suction/grasped', self.on_grasped, 10, callback_group=self.cb)
@@ -74,6 +75,7 @@ class MotionServer(Node):
 
         self.create_service(Weigh, '/suction/weigh', self.on_weigh, callback_group=self.cb)
         self.create_service(Trigger, '/motion/park', self.on_park, callback_group=self.cb)
+        self.create_service(Trigger, '/motion/drop_held', self.on_drop_held, callback_group=self.cb)
         self.create_service(CommitPlacement, '/motion/scene/add_placed', self.on_add_placed,
                             callback_group=self.cb)
         self.create_service(Trigger, '/motion/scene/clear_placed', self.on_clear_placed,
@@ -196,6 +198,63 @@ class MotionServer(Node):
                 q[i] += 2 * math.pi
         return q
 
+    def lift_z(self, box_height):
+        """TCP height at which a carried box clears the conveyor frame / end stop."""
+        return (self.cell['conveyor']['belt_top_z'] + self.m['lift_clearance'] +
+                box_height + self.m['pick_gap'])
+
+    def hub_z(self, box_height):
+        """TCP height at the hub: carried box (or cup) clears the conveyor and every stack."""
+        clear = max(self.cell['conveyor']['belt_top_z'] + self.m['lift_clearance'],
+                    self.stack_top + self.m['stack_clearance'])
+        return clear + box_height + self.m['pick_gap']
+
+    def tcp_bearing_offset(self):
+        q = np.array(self.cell['robot']['home'], dtype=float)
+        tcp = self.kin.fk(q)[:3, 3]
+        return math.atan2(tcp[1], tcp[0]) - q[0]
+
+    def route_pan(self, q_goal):
+        """Choose the 2*pi branch of the goal pan so the TCP bearing sweeps through
+        swing_bearing (+x, downstream side) and never through the opposite direction."""
+        off = self.tcp_bearing_offset()
+        avoid = self.m['swing_bearing'] + math.pi
+        b0 = self.joints[0] + off
+        best = None
+        for k in (-2, -1, 0, 1, 2):
+            pan = q_goal[0] + 2 * math.pi * k
+            if not LOWER[0] <= pan <= UPPER[0]:
+                continue
+            b1 = pan + off
+            lo, hi = min(b0, b1), max(b0, b1)
+            crosses = any(lo < avoid + 2 * math.pi * m < hi for m in range(-3, 4))
+            cost = abs(pan - self.joints[0]) + (100.0 if crosses else 0.0)
+            if best is None or cost < best[0]:
+                best = (cost, pan)
+        q = q_goal.copy()
+        q[0] = best[1]
+        return q
+
+    def go_hub(self, target_xy, z, yaw):
+        """PTP to the transit hub at the bearing of target_xy (radius hub_radius, height z),
+        swinging via the downstream side."""
+        b = math.atan2(target_xy[1], target_xy[0])
+        r = self.m['hub_radius']
+        hub = np.array([r * math.cos(b), r * math.sin(b), z])
+        q, _ = self.solve(hub, [yaw], ref=self.joints, seed=self.seed_for(hub))
+        if q is None:
+            return False, f'no IK for hub {hub.round(3)}'
+        return self.ptp(self.route_pan(q))
+
+    def go_park(self):
+        """Out of the camera view: hub on the pallet side, then the park pose."""
+        T = self.kin.fk(self.joints)
+        yaw = math.atan2(T[1, 0], T[0, 0])           # tool x axis (TCP points down)
+        _, msg = self.go_hub(self.cell['pallet']['center_xy'],
+                             max(self.hub_z(0.0), T[2, 3]), yaw)
+        ok, msg2 = self.ptp(self.route_pan(np.array(self.cell['robot']['home'], dtype=float)))
+        return ok, f'{msg}; {msg2}'
+
     def feedback(self, goal_handle, fb_type, phase, progress):
         fb = fb_type.Feedback()
         fb.phase = phase
@@ -231,9 +290,14 @@ class MotionServer(Node):
 
         self.feedback(gh, PickBox, 'tare F/T', 0.05)
         self.suction_pub.publish(Bool(data=False))
+        self.feedback(gh, PickBox, 'transit', 0.08)
+        ok, msg = self.go_hub(pre[:2], max(self.hub_z(0.0), pre[2]), yaw)
+        if not ok:
+            return self._fail(res, 'PLAN_FAILED', f'hub: {msg}')
         self.feedback(gh, PickBox, 'move to pre-grasp', 0.1)
         ok, msg = self.ptp(q_pre)
         if not ok:
+            self.go_park()
             return self._fail(res, 'PLAN_FAILED', f'pre-grasp: {msg}')
         time.sleep(m['weigh_settle'])
         tare = self.mean_fz(m['weigh_window'])
@@ -244,6 +308,7 @@ class MotionServer(Node):
         ok, msg = self.descend(grasp, yaw)
         if not ok:
             self.lin(pre, yaw)
+            self.go_park()
             return self._fail(res, 'EXEC_FAILED', f'descend: {msg}')
 
         self.feedback(gh, PickBox, 'suction on', 0.5)
@@ -251,6 +316,7 @@ class MotionServer(Node):
         if not self.wait_for(lambda: self.grasped, m['grasp_confirm_timeout']):
             self.suction_pub.publish(Bool(data=False))
             self.lin(pre, yaw)
+            self.go_park()
             return self._fail(res, 'NO_GRASP', 'suction did not confirm a grasp')
 
         # Attach the measured box to the TCP in the planning scene.
@@ -272,26 +338,50 @@ class MotionServer(Node):
         }
 
         self.feedback(gh, PickBox, 'lift', 0.7)
-        lift_z = max(pre[2], self.cell['conveyor']['belt_top_z'] + m['transit_clearance'] +
-                     box.height + m['pick_gap'])
-        ok, msg = self.lin(np.array([grasp[0], grasp[1], lift_z]), yaw)
+        # LIN straight out of the grasp to the pre-grasp height, then a joint-space move
+        # straight up to transit height (clears queued boxes before any swing; avoids the
+        # Cartesian near-singularity of a long vertical LIN with the arm stretched up).
+        ok, msg = self.lin(pre, yaw)
+        if ok:
+            lift = np.array([pre[0], pre[1], max(pre[2], self.lift_z(box.height))])
+            q_lift, _ = self.solve(lift, [yaw], ref=self.joints, seed=self.joints)
+            if q_lift is None:
+                ok, msg = False, f'no IK for lift {lift.round(3)}'
+            else:
+                ok, msg = self.ptp(q_lift)
         if not ok:
+            self.abort_grasp(pre, yaw)
             return self._fail(res, 'EXEC_FAILED', f'lift: {msg}')
         if not self.grasped:
             self.mv.detach_and_remove('held_box')
             self.held = None
+            self.go_park()
             return self._fail(res, 'LOST_GRASP', 'box dropped during lift')
 
         self.feedback(gh, PickBox, 'weigh', 0.9)
         time.sleep(m['weigh_settle'])
         fz = self.mean_fz(m['weigh_window'])
         res.measured_mass = (fz - tare) / G if fz is not None and tare is not None else 0.0
+        self.feedback(gh, PickBox, 'clear the conveyor', 0.95)
+        ok, msg = self.go_hub(self.cell['pallet']['center_xy'], self.hub_z(box.height), yaw)
+        if not ok:
+            return self._fail(res, 'EXEC_FAILED', f'hub after pick: {msg}')
         res.sim_model_name = self.attached_name
         res.success = True
         res.message = f'picked, {res.measured_mass:.2f} kg'
         self.held['mass'] = res.measured_mass
         self.feedback(gh, PickBox, 'done', 1.0)
         return res
+
+    def abort_grasp(self, pre, yaw):
+        """Failure after the grasp: put the box down where it is and back off."""
+        self.suction_pub.publish(Bool(data=False))
+        self.wait_for(lambda: not self.grasped, self.m['release_confirm_timeout'])
+        self.mv.detach_and_remove('held_box')
+        self.held = None
+        tcp = self.kin.fk(self.joints)[:3, 3]
+        self.lin(np.array([tcp[0], tcp[1], max(tcp[2], pre[2])]), yaw)
+        self.go_park()
 
     # ------------------------------------------------------------------ place
     def execute_place(self, goal_handle):
@@ -329,10 +419,30 @@ class MotionServer(Node):
             return self._fail(res, 'NO_IK', f'no IK for pre-place {pre_top.round(3)}')
         _, q_pre, yaw = best
 
-        self.feedback(gh, PlaceBox, 'move to pre-place', 0.1)
-        ok, msg = self.ptp(q_pre)
+        # Travel at hub height to directly above the target (clears every stack), then go
+        # straight down: joint-space moves near the stacks could sweep the box sideways.
+        self.feedback(gh, PlaceBox, 'transit above target', 0.1)
+        z_top = self.hub_z(self.held['box'].height)
+        above = None
+        pre_tcp = tcp_for(pre_top, yaw)
+        z = max(z_top, pre_tcp[2])
+        while z >= pre_tcp[2] - 1e-6:
+            cand = np.array([pre_tcp[0], pre_tcp[1], z])
+            q_above, _ = self.solve(cand, [yaw], ref=self.joints, seed=q_pre)
+            if q_above is not None:
+                above = cand
+                break
+            z -= 0.05
+        if above is None:
+            return self._fail(res, 'NO_IK', f'no IK above target {pre_tcp.round(3)}')
+        ok, msg = self.ptp(self.route_pan(q_above))
         if not ok:
-            return self._fail(res, 'PLAN_FAILED', f'pre-place: {msg}')
+            return self._fail(res, 'PLAN_FAILED', f'above target: {msg}')
+        if above[2] > pre_tcp[2] + 1e-3:
+            self.feedback(gh, PlaceBox, 'down to pre-place', 0.3)
+            ok, msg = self.lin(pre_tcp, yaw)
+            if not ok:
+                return self._fail(res, 'EXEC_FAILED', f'down to pre-place: {msg}')
         self.feedback(gh, PlaceBox, 'descend', 0.4)
         ok, msg = self.descend(tcp_for(release_top, yaw), yaw)
         if not ok:
@@ -360,8 +470,16 @@ class MotionServer(Node):
     # ------------------------------------------------------------------ misc services
     def on_park(self, request, response):
         with self.busy:
-            ok, msg = self.ptp(self.cell['robot']['home'])
+            ok, msg = self.go_park()
         response.success, response.message = ok, msg
+        return response
+
+    def on_drop_held(self, request, response):
+        """Recovery: suction off and forget the held box (after it was removed by an operator)."""
+        self.suction_pub.publish(Bool(data=False))
+        self.mv.detach_and_remove('held_box')
+        self.held = None
+        response.success, response.message = True, 'held box dropped from state'
         return response
 
     def on_add_placed(self, request, response):
@@ -374,6 +492,7 @@ class MotionServer(Node):
             obj_id, 'world', (box.length, box.width, box.height), make_pose(center, q))])
         if ok:
             self.placed_ids.append(obj_id)
+            self.stack_top = max(self.stack_top, pl.top_center.position.z)
         response.success, response.message = ok, obj_id
         return response
 
@@ -381,6 +500,8 @@ class MotionServer(Node):
         ok = self.mv.remove_objects(self.placed_ids) if self.placed_ids else True
         n = len(self.placed_ids)
         self.placed_ids = []
+        self.stack_top = self.cell['pallet']['size'][2]
+        self.stack_top = self.cell['pallet']['size'][2]   # tallest placed box top (world z)
         response.success, response.message = ok, f'removed {n} boxes from the planning scene'
         return response
 

@@ -100,6 +100,10 @@ perception:
   max_side: 0.66                  # a top face longer than this is treated as merged boxes
   color_split_min_dist: 12.0      # min RGB cluster distance (0-255) to split merged boxes
   detect_timeout: 3.0             # s
+  # Refuse to detect while the robot hangs over the pick ROI (it would occlude the box):
+  occlusion_links: [upper_arm_link, forearm_link, wrist_1_link, wrist_2_link, wrist_3_link,
+                    suction_cup]
+  occlusion_margin: 0.30          # [m] around the ROI rectangle
 
 motion:
   planning_group: manipulator
@@ -112,7 +116,15 @@ motion:
   slow_zone: 0.03                  # [m] length of the slow final approach
   pre_grasp_height: 0.15           # above the detected top-face center
   pick_gap: 0.003                  # cup face this far above the top face when suction turns on
-  transit_clearance: 0.45          # carried box bottom >= belt top + this before swinging
+  lift_clearance: 0.20             # carried box bottom >= belt top + this before swinging
+                                   # (clears the conveyor frame and the end stop; queued boxes
+                                   # are never passed because swings go via the +x side)
+  stack_clearance: 0.08            # carried box bottom >= tallest placed stack + this at the hub
+  hub_radius: 0.60                 # transit waypoint: TCP this far from the base axis, at the
+                                   # bearing of the next target and at transit height
+  swing_bearing: 0.0               # conveyor <-> pallet swings pass the TCP bearing (world
+                                   # yaw) through this direction: 0 = +x, the downstream side
+                                   # where no queued boxes are
   pre_place_height: 0.15           # above the target top-face center
   release_gap: 0.005               # box bottom this far above the resting surface at release
   retreat_height: 0.15
@@ -135,12 +147,53 @@ reachability:
   top_heights: [0.15, 1.20, 0.05]  # [first, last, step] box-top height above pallet top
   min_coverage: 1.0                # usable stack height = highest level with this coverage
 
+packing:
+  planner: heuristic               # naive | heuristic
+  resolution: 0.01                 # height-map grid [m]
+  gap: 0.01                        # horizontal gap left between boxes [m] (placement tolerance)
+  candidate_step: 0.05             # coarse grid of footprint corners [m] (+ contact points)
+  support_ratio: 0.75              # min supported fraction of the base area
+  support_tol: 0.005               # cell supports the box if within this of the resting height
+  mass_ratio: 1.5                  # no box heavier than this x any box directly under it
+  reach_over_clearance: 0.10       # stacks between the robot and the target must be at least
+                                   # this much below the target resting height + pre_place_height
+  heuristic:                       # score = lower is better (tuned offline on seeds 100-159,
+                                   # disjoint from the benchmark seeds; see docs/RESULTS.md)
+    w_rest_height: 0.3             # resting height of the box bottom [m]
+    w_deck: 3.0                    # pallet-deck area newly covered (fraction of the deck):
+                                   # keeps the deck for boxes that cannot stand on another box
+    w_max_height: 0.5              # increase of the pallet's max height [m]
+    w_far: 0.6                     # prefers far rows: (1 - v_far/pallet_width)
+    w_left: 0.05                   # tie-break toward low u
+    w_contact: 0.4                 # minus fraction of the box perimeter in contact
+    w_roughness: 0.3               # height-map roughness change [m]
+    rerank_top_n: 25               # re-rank the best n by the big-box reservation term:
+    reserve_footprint: [0.5, 0.5]  # keep a flat region that can host a box this large
+    w_reserve: 1.0                 # penalty for destroying the last such region
+    w_regions: 0.002               # bonus per remaining region position (capped at 200)
+  physics:
+    enabled: true
+    top_k: 3                       # physics-check only the best k candidates
+    sim_time: 1.5                  # [s]
+    timestep: 0.004167             # 1/240 s
+    max_displacement: 0.010        # [m]
+    max_rotation_deg: 2.0
+    friction: 0.5
+    drop_height: 0.002             # candidate spawned this far above its resting height
+
 # Acceptance thresholds (Milestone B). Do not loosen.
 perception_eval:
   dim_mean_mm: 5.0
   dim_max_mm: 12.0
   center_mean_mm: 5.0
   yaw_mean_deg: 1.5
+
+# Acceptance thresholds (Milestone C pick_place test). Do not loosen.
+pick_place_test:
+  min_success: 19                  # of 20
+  place_err_mm: 15.0
+  yaw_err_deg: 3.0
+  neighbor_disp_mm: 10.0
 
 spawner:
   rate: 0.5                       # spawn attempts per second (0 = only on demand);

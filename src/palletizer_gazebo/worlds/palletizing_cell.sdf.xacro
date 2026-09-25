@@ -7,6 +7,7 @@
 -->
 <sdf version="1.9" xmlns:xacro="http://wiki.ros.org/xacro">
   <xacro:arg name="cell_config" default=""/>
+  <xacro:arg name="real_time_factor" default="1.0"/>
   <xacro:property name="cell" value="${xacro.load_yaml('$(arg cell_config)')}"/>
   <xacro:property name="cv" value="${cell['conveyor']}"/>
   <xacro:property name="pal" value="${cell['pallet']}"/>
@@ -43,7 +44,7 @@
   <world name="${cell['world_name']}">
     <physics name="1ms" type="ignored">
       <max_step_size>0.001</max_step_size>
-      <real_time_factor>1.0</real_time_factor>
+      <real_time_factor>$(arg real_time_factor)</real_time_factor>
     </physics>
 
     <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>

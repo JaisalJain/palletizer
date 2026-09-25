@@ -6,6 +6,7 @@ Args:
   gui:=true|false          Gazebo GUI (false = headless server with headless rendering)
   rviz:=true|false         RViz (defaults to the value of gui)
   cell_config:=<path>      cell_config.yaml (default: palletizer_bringup/config/cell_config.yaml)
+  rtf:=<float>             Gazebo real-time factor (default 1.0)
 """
 
 import os
@@ -72,7 +73,8 @@ def launch_setup(context, *args, **kwargs):
     world_file = os.path.join(out_dir, 'palletizing_cell.sdf')
     world_xml = xacro.process_file(
         os.path.join(gz_share, 'worlds', 'palletizing_cell.sdf.xacro'),
-        mappings={'cell_config': cell_config}).toxml()
+        mappings={'cell_config': cell_config,
+                  'real_time_factor': LaunchConfiguration('rtf').perform(context)}).toxml()
     with open(world_file, 'w') as f:
         f.write(world_xml)
 
@@ -178,6 +180,8 @@ def generate_launch_description():
         DeclareLaunchArgument('gui', default_value='true', description='Start the Gazebo GUI'),
         DeclareLaunchArgument('rviz', default_value='',
                               description='Start RViz (default: same as gui)'),
+        DeclareLaunchArgument('rtf', default_value='1.0',
+                              description='Gazebo real_time_factor (0 = as fast as possible)'),
         DeclareLaunchArgument('cell_config', default_value=_default_cell_config(),
                               description='Path to cell_config.yaml'),
         OpaqueFunction(function=launch_setup),

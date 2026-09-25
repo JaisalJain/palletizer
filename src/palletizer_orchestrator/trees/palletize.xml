@@ -1,0 +1,109 @@
+<?xml version="1.0"?>
+<!--
+  Palletizing loop. Open in Groot2 (live: connect to port 1667 while the orchestrator runs).
+  Blackboard: box (DetectedBox), pre / placement (Placement), mass (kg), sim_name (eval only).
+-->
+<root BTCPP_format="4" main_tree_to_execute="Palletize">
+
+  <BehaviorTree ID="Palletize">
+    <Sequence>
+      <Park/>
+      <ResumeConveyor/>
+      <Fallback>
+        <KeepRunningUntilFailure>
+          <Sequence>
+            <MorePallets/>
+            <ForceSuccess>
+              <SubTree ID="Cycle"/>
+            </ForceSuccess>
+          </Sequence>
+        </KeepRunningUntilFailure>
+        <AlwaysSuccess/>
+      </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="Cycle">
+    <Sequence>
+      <WaitBoxReady timeout="600"/>
+
+      <Fallback name="Detect">
+        <RetryUntilSuccessful num_attempts="3">
+          <DetectBox box="{box}"/>
+        </RetryUntilSuccessful>
+        <Sequence name="RejectUndetectable">
+          <Park/>
+          <RejectPickZoneBox/>
+          <ReportCycle outcome="rejected_detect"/>
+          <ResumeConveyor/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+
+      <Fallback name="PreCheckFit">
+        <PlanPlacement box="{box}" mass="0" check_only="true" placement="{pre}"/>
+        <Sequence name="PalletFullBeforePick">
+          <SubTree ID="PalletSwap"/>
+          <PlanPlacement box="{box}" mass="0" check_only="true" placement="{pre}"/>
+        </Sequence>
+        <Sequence name="NeverFits">
+          <RejectPickZoneBox/>
+          <ReportCycle outcome="rejected_no_fit" box="{box}"/>
+          <ResumeConveyor/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+
+      <Fallback name="Grasp">
+        <RetryUntilSuccessful num_attempts="2">
+          <PickBox box="{box}" mass="{mass}" sim_name="{sim_name}"/>
+        </RetryUntilSuccessful>
+        <Sequence name="RejectUngraspable">
+          <Park/>
+          <RejectPickZoneBox/>
+          <ReportCycle outcome="rejected_grasp" box="{box}"/>
+          <ResumeConveyor/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+
+      <ResumeConveyor/>
+
+      <Fallback name="PlanWithMeasuredMass">
+        <PlanPlacement box="{box}" mass="{mass}" placement="{placement}"/>
+        <Sequence name="PalletFullAfterWeighing">
+          <SubTree ID="PalletSwap"/>
+          <PlanPlacement box="{box}" mass="{mass}" placement="{placement}"/>
+        </Sequence>
+      </Fallback>
+
+      <Fallback name="PlaceAndVerify">
+        <RetryUntilSuccessful num_attempts="2">
+          <Sequence>
+            <PlaceBox box="{box}" placement="{placement}"/>
+            <VerifyRelease max_mass="0.3"/>
+          </Sequence>
+        </RetryUntilSuccessful>
+        <Sequence name="RejectHeld">
+          <RejectHeldBox/>
+          <DropHeld/>
+          <ReportCycle outcome="rejected_place" box="{box}" mass="{mass}" sim_name="{sim_name}"/>
+          <AlwaysFailure/>
+        </Sequence>
+      </Fallback>
+
+      <CommitPlacement box="{box}" placement="{placement}" mass="{mass}" sim_name="{sim_name}"/>
+      <ReportCycle outcome="placed" box="{box}" placement="{placement}" mass="{mass}"
+                   sim_name="{sim_name}"/>
+    </Sequence>
+  </BehaviorTree>
+
+  <BehaviorTree ID="PalletSwap">
+    <Sequence>
+      <FinishPallet reason="full"/>
+      <ClearPallet/>
+      <ResetPackingModel/>
+      <ClearPlanningScene/>
+    </Sequence>
+  </BehaviorTree>
+</root>

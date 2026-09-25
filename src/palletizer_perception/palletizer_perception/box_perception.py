@@ -24,6 +24,8 @@ from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Bool, ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
+from tf2_ros import Buffer, TransformListener
+
 from palletizer_perception.detector import BoxDetector
 from palletizer_tools import cell_config
 
@@ -45,6 +47,8 @@ class BoxPerception(Node):
         self.next_id = 1
         self.last_ready = False
 
+        self.tf_buffer = Buffer()
+        self.tf_listener = TransformListener(self.tf_buffer, self)
         sensors = ReentrantCallbackGroup()
         self.create_subscription(Image, '/overhead_camera/depth_image', self.on_depth, 10,
                                  callback_group=sensors)
@@ -91,7 +95,26 @@ class BoxPerception(Node):
         return response
 
     # ---------------------------------------------------------------- detection
+    def robot_in_view(self):
+        """Name of a robot link hanging over the pick ROI (from TF), or ''."""
+        p = self.cell['perception']
+        m = p['occlusion_margin']
+        x0, x1 = self.det.roi_x[0] - m, self.det.roi_x[1] + m
+        y0, y1 = self.det.roi_y[0] - m, self.det.roi_y[1] + m
+        for link in p['occlusion_links']:
+            try:
+                t = self.tf_buffer.lookup_transform('world', link, rclpy.time.Time())
+            except Exception:  # noqa: BLE001
+                continue
+            tr = t.transform.translation
+            if x0 <= tr.x <= x1 and y0 <= tr.y <= y1 and tr.z > self.det.belt_z:
+                return link
+        return ''
+
     def detect(self):
+        link = self.robot_in_view()
+        if link:
+            return False, f'robot in the camera view ({link} over the pick zone)', DetectedBox()
         t0 = time.monotonic()
         while time.monotonic() - t0 < self.timeout:
             with self.lock:
