@@ -214,7 +214,8 @@ public:
   static BT::PortsList providedPorts()
   {
     return {BT::InputPort<DetectedBox>("box"), BT::InputPort<double>("mass", 0.0, "kg"),
-      BT::InputPort<bool>("check_only", false, ""), BT::OutputPort<PlacementMsg>("placement")};
+      BT::InputPort<bool>("check_only", false, ""), BT::OutputPort<PlacementMsg>("placement"),
+      BT::InputPort<PlacementMsg>("exclude", "a placement that failed in motion")};
   }
   bool fill(pi::srv::PlanPlacement::Request & req) override
   {
@@ -223,6 +224,7 @@ public:
     req.box = box.value();
     req.mass = getInput<double>("mass").value_or(0.0);
     req.check_only = getInput<bool>("check_only").value_or(false);
+    if (auto ex = getInput<PlacementMsg>("exclude")) {req.exclude.push_back(ex.value());}
     return true;
   }
   BT::NodeStatus done(const pi::srv::PlanPlacement::Response & res) override

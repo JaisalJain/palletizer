@@ -161,6 +161,12 @@ class ConveyorController(Node):
 
     def on_resume(self, request, response):
         self.maintenance_stop = False
+        pick = self.zones[-1]
+        if self.blocked[pick] and not self.raw[pick]:
+            # the cell says the box was taken and the beam is clear: accept the removal now
+            # instead of waiting for removal_confirm (the hold would re-latch on stale state)
+            self.blocked[pick] = False
+            self.raw_count[pick] = 0
         self.holding = False          # re-latches immediately if the box is still at the eye
         response.success = True
         response.message = ('box still at the pick eye: holding' if self.blocked[self.zones[-1]]

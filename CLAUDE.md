@@ -44,6 +44,12 @@ Results and acceptance numbers: `docs/RESULTS.md`.
 - Conveyor 3.0×0.6 m belt, centerline y = 0.80, top z = 0.80, x ∈ [−2.55, 0.45], three driven zones
   infeed [−2.55, −1.55] / accum [−1.55, −0.65] / pick [−0.65, 0.45] with photo-eyes at x = −1.60 / −0.70 / 0.25.
   Boxes stop with their leading edge at the pick eye → centers in x ∈ [−0.15, 0.15].
+  Controller (`conveyor_controller.py`): one box per downstream zone (occupancy counted from
+  debounced eye edges; a zone releases only into an EMPTY zone), eye changes ignored while the
+  zone's belt is stopped (the pick eye clearing must hold 0.5 s), readings below the lidar's min
+  range count as blocked (overhanging boxes), eye posts 0.12 m outside the belt, transit
+  watchdog as a safety net. The pick zone never runs while its eye is blocked (`resume` only
+  clears the hold).
 - Pallet EUR 1.2×0.8×0.144 centered (0, −0.60). Pallet frame for packing: u = x + 0.6,
   v = −0.2 − y (0 at the robot-side edge, 0.8 at the far edge), z above the pallet top.
 - Camera (0, 0.80, 2.30) looking down, 640×480 @ 15 Hz, hfov 1.2, depth noise σ = 2 mm.
@@ -140,3 +146,12 @@ headless manual-mode stack for the scripted tests.
   perception and placement errors are far below the thresholds; expect several mm on hardware.
 - `PlanPlacement` has no "exclude this target" field; a failed place is retried once at the same
   target, then the held box is rejected.
+- Swing routing uses the canonical pan (TCP bearing in (−180°, 180°]); never pick 2π branches
+  relative to the current pan (it drifts until the +x route hits the joint limit and the arm
+  swings through the queue — this knocked boxes off the belt).
+- Always run `src/palletizer_tools/test/kill_sim.sh` between launches: gz/move_group can outlive
+  `ros2 launch`, and a leftover controller_manager breaks the next run's controller spawners
+  ("Controller already loaded" / "Failed to configure controller"). `sim_ctl.sh` and the
+  benchmark do this automatically.
+- The metrics logger keeps a box ledger: `lost_boxes` counts boxes that end below belt level
+  outside the pallet (knocked off). Collapses = placed boxes drifting > 20 mm.

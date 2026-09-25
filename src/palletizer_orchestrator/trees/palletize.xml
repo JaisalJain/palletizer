@@ -83,12 +83,15 @@
       </Fallback>
 
       <Fallback name="PlaceAndVerify">
-        <RetryUntilSuccessful num_attempts="2">
-          <Sequence>
-            <PlaceBox box="{box}" placement="{placement}"/>
-            <VerifyRelease max_mass="0.3"/>
-          </Sequence>
-        </RetryUntilSuccessful>
+        <Sequence>
+          <PlaceBox box="{box}" placement="{placement}"/>
+          <VerifyRelease max_mass="0.3"/>
+        </Sequence>
+        <Sequence name="ReplanElsewhere">
+          <PlanPlacement box="{box}" mass="{mass}" exclude="{placement}" placement="{placement}"/>
+          <PlaceBox box="{box}" placement="{placement}"/>
+          <VerifyRelease max_mass="0.3"/>
+        </Sequence>
         <Sequence name="RejectHeld">
           <RejectHeldBox/>
           <DropHeld/>

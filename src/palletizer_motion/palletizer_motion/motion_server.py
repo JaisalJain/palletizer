@@ -438,12 +438,15 @@ class MotionServer(Node):
         while z >= pre_tcp[2] - 1e-6:
             cand = np.array([pre_tcp[0], pre_tcp[1], z])
             q_above, _ = self.solve(cand, [yaw], ref=self.joints, seed=q_pre)
-            if q_above is not None:
+            # the pose must also be collision-free with the current stacks (the offline
+            # reachability map was built on an empty pallet): e.g. reaching high over the far
+            # side can put the upper arm into a tall stack next to the pedestal
+            if q_above is not None and self.mv.state_valid(self.route_pan(q_above)):
                 above = cand
                 break
             z -= 0.05
         if above is None:
-            return self._fail(res, 'NO_IK', f'no IK above target {pre_tcp.round(3)}')
+            return self._fail(res, 'NO_IK', f'no collision-free pose above target {pre_tcp.round(3)}')
         ok, msg = self.ptp(self.route_pan(q_above))
         if not ok:
             return self._fail(res, 'PLAN_FAILED', f'above target: {msg}')

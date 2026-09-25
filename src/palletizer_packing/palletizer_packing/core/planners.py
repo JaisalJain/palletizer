@@ -70,6 +70,11 @@ class Planner:
         self.reach = reach_map
         self.physics = physics
         self.last_stats = {}
+        self.exclude = []          # placements that failed in motion (same box): skip them
+
+    def excluded(self, p):
+        return any(p.rotated == e.rotated and abs(p.u0 - e.u0) < 0.02 and abs(p.v0 - e.v0) < 0.02
+                   for e in self.exclude)
 
     def plan(self, state: PalletState, box: Box, lookahead=(), check_only=False):
         raise NotImplementedError
@@ -80,6 +85,8 @@ class Planner:
         for u, v, du, dv, rot in candidates(state, box, self.cfg.step, self.cfg.gap):
             n += 1
             p = make_placement(state, box, u, v, du, dv, rot)
+            if self.excluded(p):
+                continue
             ok, _ = feasible(state, p, box, self.rules, self.reach)
             if ok:
                 out.append(p)
@@ -99,6 +106,8 @@ class NaivePlanner(Planner):
         for u, v, du, dv, rot in cands:
             n += 1
             p = make_placement(state, box, u, v, du, dv, rot)
+            if self.excluded(p):
+                continue
             ok, _ = feasible(state, p, box, self.rules, self.reach)
             if ok:
                 p.info = {'candidates_checked': n, 'physics_checks': 0,

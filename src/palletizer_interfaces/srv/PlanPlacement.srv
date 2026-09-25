@@ -1,6 +1,7 @@
 DetectedBox box
 float64 mass              # measured mass [kg]; <= 0 means unknown (mass rule skipped)
 bool check_only           # true: feasibility pre-check (no physics check needed)
+Placement[] exclude       # targets that failed in motion for this box: plan elsewhere
 ---
 bool success
 bool pallet_full          # true: no feasible placement exists for this box

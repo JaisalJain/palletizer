@@ -99,7 +99,10 @@ class PackingNode(Node):
     # ------------------------------------------------------------ services
     def on_plan(self, req, res):
         box = self.box_from(req.box, req.mass)
+        exclude = [self.from_msg(m, box) for m in req.exclude]
+        self.planner.exclude = exclude
         p = self.planner.plan(self.state, box, check_only=req.check_only)
+        self.planner.exclude = []
         stats = self.planner.last_stats
         if p is None:
             res.success = False

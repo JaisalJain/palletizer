@@ -132,11 +132,13 @@ class PickPlaceTest:
             row['pallet_swap_after'] = 1
             pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass))
         before = {n: sim.box_poses[n][0].copy() for n in self.on_pallet if n in sim.box_poses}
-        rr = None
-        for _ in range(2):          # same recovery as the behavior tree: retry once
-            rr = self.action(self.place, PlaceBox.Goal(placement=pl.placement, box=box))
-            if rr.success:
-                break
+        rr = self.action(self.place, PlaceBox.Goal(placement=pl.placement, box=box))
+        if not rr.success:          # same recovery as the behavior tree: re-plan elsewhere
+            row['replanned'] = 1
+            pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass,
+                                                           exclude=[pl.placement]))
+            if pl.success:
+                rr = self.action(self.place, PlaceBox.Goal(placement=pl.placement, box=box))
         row['motion_time_s'] = time.time() - t0
         if not rr.success:
             row['outcome'] = f'place_failed:{rr.error_code} {rr.message}'
