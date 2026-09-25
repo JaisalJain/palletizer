@@ -42,6 +42,13 @@ class ConveyorController(Node):
         self.speed = float(self.declare_parameter('speed', float(cv['speed'])).value)
         self.zones = [z['name'] for z in cv['zones']]
         self.blocked_range = cv['photo_eye']['blocked_range']
+        self.debounce = int(cv['photo_eye']['debounce'])
+        self.removal_confirm = float(cv['photo_eye']['removal_confirm'])
+        self.raw = {z: False for z in self.zones}
+        self.transit_limit = {z['name']: cv['transit_timeout_factor'] * (z['x_max'] - z['x_min']) /
+                              max(self.speed, 1e-3) for z in cv['zones']}
+        self.raw_count = {z: 0 for z in self.zones}        # consecutive samples disagreeing
+        self.clear_running = {z: 0.0 for z in self.zones}  # s the eye was clear while running
         self.settle_time = cv['settle_time']
 
         self.blocked = {z: False for z in self.zones}
@@ -67,8 +74,30 @@ class ConveyorController(Node):
             f'conveyor_controller ready: zones {self.zones}, speed {self.speed} m/s')
 
     def on_eye(self, zone, msg):
+        # -inf / below range_min: something right in front of the emitter -> blocked
+        near = any(r == -math.inf or (math.isfinite(r) and r < msg.range_min) for r in msg.ranges)
         valid = [r for r in msg.ranges if math.isfinite(r) and msg.range_min <= r]
-        self.blocked[zone] = bool(valid) and min(valid) < self.blocked_range
+        self.raw[zone] = near or (bool(valid) and min(valid) < self.blocked_range)
+
+    def update_eyes(self, dt):
+        """Debounced eye states. A box cannot cross an eye while its zone's belt is stopped,
+        so changes on a stopped zone are ignored - except the pick eye clearing (the robot
+        lifted the box), which must stay clear for removal_confirm seconds."""
+        pick = self.zones[-1]
+        for z in self.zones:
+            if self.raw[z] == self.blocked[z]:
+                self.raw_count[z] = 0
+                continue
+            self.raw_count[z] += 1
+            if self.running.get(z, True):
+                need = self.debounce
+            elif z == pick and self.blocked[z] and not self.raw[z]:
+                need = max(1, int(round(self.removal_confirm / dt)))
+            else:
+                continue                      # stopped belt: the reading is flicker
+            if self.raw_count[z] >= need:
+                self.blocked[z] = self.raw[z]
+                self.raw_count[z] = 0
 
     def update_occupancy(self):
         for i, z in enumerate(self.zones):
@@ -84,8 +113,22 @@ class ConveyorController(Node):
         for z in self.zones[1:]:
             if self.blocked[z]:
                 self.occupancy[z] = max(self.occupancy[z], 1)
+        # transit watchdog: a claimed box must reach the eye within the zone transit time
+        dt = 0.02
+        for z in self.zones[1:]:
+            if self.occupancy[z] > 0 and not self.blocked[z] and self.running.get(z, False):
+                self.clear_running[z] += dt
+                if self.clear_running[z] > self.transit_limit[z]:
+                    self.get_logger().warn(
+                        f'zone {z}: counted {self.occupancy[z]} box(es) but none reached the '
+                        f'eye within {self.transit_limit[z]:.1f} s; resetting occupancy')
+                    self.occupancy[z] = 0
+                    self.clear_running[z] = 0.0
+            else:
+                self.clear_running[z] = 0.0
 
     def step(self):
+        self.update_eyes(0.02)
         self.update_occupancy()
         pick = self.zones[-1]
         # --- pick zone ---

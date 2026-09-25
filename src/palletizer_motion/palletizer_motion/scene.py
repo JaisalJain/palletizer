@@ -22,7 +22,8 @@ def static_objects(cell, frame='world'):
     # photo-eye emitters / reflectors on the rails
     eye = cv['photo_eye']
     for z in cv['zones']:
-        for side, dy in (('e', -cv['belt_width'] / 2 - 0.04), ('r', cv['belt_width'] / 2 + 0.04)):
+        off = eye['offset']
+        for side, dy in (('e', -cv['belt_width'] / 2 - off), ('r', cv['belt_width'] / 2 + off)):
             add(f'eye_{z["name"]}_{side}', (0.04, 0.04, 0.06),
                 (z['eye_x'], cv['y'] + dy, cv['belt_top_z'] + eye['height']))
     add('pallet', tuple(pal['size']),

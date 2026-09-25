@@ -188,13 +188,13 @@
         <xacro:if value="${len(zones) > 0}">
           <xacro:property name="z" value="${zones[0]}"/>
           <link name="eye_${z['name']}">
-            <pose>${z['eye_x']} ${cv['y'] - cv['belt_width'] / 2 - 0.04} ${cv['belt_top_z'] + eye['height']} 0 0 ${pi / 2}</pose>
+            <pose>${z['eye_x']} ${cv['y'] - cv['belt_width'] / 2 - eye['offset']} ${cv['belt_top_z'] + eye['height']} 0 0 ${pi / 2}</pose>
             <visual name="emitter">
               <geometry><box><size>0.03 0.03 0.05</size></box></geometry>
               <xacro:material rgba="${[0.1, 0.6, 0.2, 1]}"/>
             </visual>
             <visual name="reflector">
-              <pose>${cv['belt_width'] + 0.08} 0 0 0 0 0</pose>
+              <pose>${cv['belt_width'] + 2 * eye['offset']} 0 0 0 0 0</pose>
               <geometry><box><size>0.01 0.04 0.05</size></box></geometry>
               <xacro:material rgba="${[0.9, 0.1, 0.1, 1]}"/>
             </visual>
@@ -210,7 +210,7 @@
                   <vertical><samples>1</samples><resolution>1</resolution>
                     <min_angle>0</min_angle><max_angle>0</max_angle></vertical>
                 </scan>
-                <range><min>0.02</min><max>${cv['belt_width'] + 0.06}</max><resolution>0.001</resolution></range>
+                <range><min>0.02</min><max>${cv['belt_width'] + 2 * eye['offset'] - 0.02}</max><resolution>0.001</resolution></range>
               </lidar>
             </sensor>
           </link>

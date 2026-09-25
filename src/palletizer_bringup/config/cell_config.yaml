@@ -53,7 +53,17 @@ conveyor:
   photo_eye:
     height: 0.05                  # beam height above the belt top
     rate: 50.0                    # Hz
-    blocked_range: 0.62           # beam reading below this (m) = blocked (clear = no return)
+    offset: 0.12                  # emitter / reflector posts this far outside the belt edges
+                                  # (boxes up to 0.8 m wide at 25 deg overhang the 0.6 m belt)
+    blocked_range: 0.80           # beam reading below this (m) = blocked (clear = no return);
+                                  # a reading below the sensor's min range also = blocked
+    debounce: 3                   # consecutive samples for a state change while the zone
+                                  # moves (a box corner crossing the beam can flicker)
+    removal_confirm: 0.5          # s the pick eye must stay clear, with the belt stopped, to
+                                  # count as "box removed" (a stopped box's front edge sits on
+                                  # the beam line and can flicker indefinitely)
+  transit_timeout_factor: 1.5     # a zone that claims a box but whose eye stays clear while
+                                  # running longer than factor x (zone length / speed) is reset
   settle_time: 0.3                # s the pick eye must stay blocked with belt stopped = box ready
 
 pick_zone:
