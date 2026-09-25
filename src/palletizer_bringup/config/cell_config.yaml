@@ -81,8 +81,32 @@ camera:
   near: 0.1
   far: 4.0
   depth_noise_stddev: 0.002       # Gaussian depth noise [m]
+  # gz-sensors reports cx = width/2, cy = height/2 but renders pixel i centred at i + 0.5
+  # (OpenCV convention puts pixel centres at integer coordinates). Measured: a constant
+  # half-pixel (1.34 mm at 1.25 m) grasp-point offset without this correction.
+  pixel_center_offset: 0.5
   mast_xy: [0.0, 1.45]
   mast_size: [0.08, 0.08, 2.40]
+
+perception:
+  frames: 5                       # depth frames averaged per detection (box is stationary)
+  roi_margin_y: 0.05              # ROI = pick_zone.roi_x x (belt width + margin)
+  min_object_height: 0.04         # above belt top [m]
+  max_object_height: 0.60
+  plateau_tol: 0.008              # top-face pixels within this of the plateau height [m]
+  plateau_bin: 0.003              # height histogram bin [m]
+  min_top_area: 0.02              # min top-face area [m^2] (smallest box 0.2 x 0.2 = 0.04)
+  min_fill_ratio: 0.93            # pixel area / fitted rectangle area; lower = not one box
+  max_side: 0.66                  # a top face longer than this is treated as merged boxes
+  color_split_min_dist: 12.0      # min RGB cluster distance (0-255) to split merged boxes
+  detect_timeout: 3.0             # s
+
+# Acceptance thresholds (Milestone B). Do not loosen.
+perception_eval:
+  dim_mean_mm: 5.0
+  dim_max_mm: 12.0
+  center_mean_mm: 5.0
+  yaw_mean_deg: 1.5
 
 spawner:
   rate: 0.5                       # spawn attempts per second (0 = only on demand);

@@ -9,7 +9,7 @@ stability check.
 ## Phases
 - **v0 (done)**: workspace, robot description, Gazebo world, runtime suction plugin, box
   spawner, conveyor control, integration tests.
-- **v1 (in progress, one combined task)**: A spawner/world updates (done), B perception,
+- **v1 (in progress, one combined task)**: A spawner/world updates (done), B perception (done),
   C MoveIt pick & place, D packing, E orchestrator + metrics + benchmark.
 
 ## Ground rules (v1)
@@ -77,6 +77,17 @@ pallet top surface nearest the robot on the −x side, world-aligned), `overhead
 | `/suction/wrench` | geometry_msgs/WrenchStamped | F/T on the cup joint |
 | `/world/palletizing_cell/create`, `/remove`, `/set_pose` | ros_gz_interfaces Spawn/Delete/SetEntityPose | bridged gz services |
 | `/joint_trajectory_controller/follow_joint_trajectory` | FollowJointTrajectory | position-controlled arm |
+
+## Perception (palletizer_perception)
+`detector.py` (no ROS): depth → world points (camera pose from config, `pixel_center_offset`
+0.5 for gz), belt-plane subtraction in the pick ROI, top faces = connected regions on height
+plateaus; per face: ray/plane intersection → minAreaRect (yaw) + second moments (L, W) +
+centroid (grasp point). Merged equal-height faces (fill ratio < 0.93 or side > 0.66 m) are
+split by RGB k-means; if impossible the face gets confidence 0.2 and is not returned.
+The chosen box is the most downstream confident face. `box_perception` averages 5 fresh
+depth frames; `/perception/detect_box` (DetectBox) on demand, and it auto-publishes
+`/perception/detected_box` on the rising edge of `/conveyor_controller/box_ready`.
+Markers on `/perception/markers`. Evaluation: `ros2 run palletizer_perception eval_perception`.
 
 ## SuctionGripper (palletizer_gazebo/src/SuctionGripper.cc)
 On `/suction/cmd` true it scans models named `box_*`, takes each box collision's face most

@@ -12,6 +12,7 @@
   <exec_depend>palletizer_description</exec_depend>
   <exec_depend>palletizer_gazebo</exec_depend>
   <exec_depend>palletizer_tools</exec_depend>
+  <exec_depend>palletizer_perception</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

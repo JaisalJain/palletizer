@@ -37,6 +37,10 @@ def generate_launch_description():
         parameters=[common, {'rate': LaunchConfiguration('spawn_rate'),
                              'seed': LaunchConfiguration('seed')}])
 
+    perception = Node(
+        package='palletizer_perception', executable='box_perception',
+        output='screen', parameters=[common])
+
     return LaunchDescription([
         DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value=''),
@@ -46,6 +50,7 @@ def generate_launch_description():
                               description='Box sequence seed (-1 = random)'),
         sim,
         conveyor,
+        perception,
         # Give Gazebo time to load the world before the first spawn.
         TimerAction(period=8.0, actions=[spawner]),
     ])
