@@ -29,7 +29,17 @@ BEGIN = '<!-- BENCHMARK:BEGIN -->'
 END = '<!-- BENCHMARK:END -->'
 
 
-def run_one(planner, seed, rtf, timeout, log_dir):
+KILL_SIM = os.path.join(WS, 'src', 'palletizer_tools', 'test', 'kill_sim.sh')
+
+
+def cleanup():
+    """Make sure no process of a previous run is alive (a leftover controller_manager
+    answers the next run's spawners and breaks its startup)."""
+    subprocess.run([KILL_SIM], check=False)
+    time.sleep(2.0)
+
+
+def run_one(planner, seed, rtf, timeout, log_dir, attempt=1):
     run = f'bench_{planner}_seed{seed}'
     for f in glob.glob(os.path.join(RESULTS, f'{run}_*.csv')):
         os.remove(f)
@@ -37,6 +47,7 @@ def run_one(planner, seed, rtf, timeout, log_dir):
     cmd = ['ros2', 'launch', 'palletizer_bringup', 'palletizer.launch.py', 'mode:=auto',
            'gui:=false', 'rviz:=false', f'planner:={planner}', f'seed:={seed}',
            'max_pallets:=1', f'rtf:={rtf}', f'run_name:={run}', f'results_dir:={RESULTS}']
+    cleanup()
     t0 = time.time()
     proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     try:
@@ -52,10 +63,15 @@ def run_one(planner, seed, rtf, timeout, log_dir):
             except subprocess.TimeoutExpired:
                 os.killpg(proc.pid, signal.SIGKILL)
         log.close()
+        cleanup()
     pallets = os.path.join(RESULTS, f'{run}_pallets.csv')
     rows = list(csv.DictReader(open(pallets))) if os.path.exists(pallets) else []
     print(f'{run}: {status} in {time.time() - t0:.0f} s, '
           f'{"pallet recorded" if rows else "NO pallet recorded"}', flush=True)
+    if not rows and attempt < 3:
+        # infrastructure failure (e.g. startup race): rerun the same seed, reported in the log
+        print(f'{run}: retrying (attempt {attempt + 1})', flush=True)
+        return run_one(planner, seed, rtf, timeout, log_dir, attempt + 1)
     return status
 
 
@@ -89,9 +105,9 @@ def summary(planners, rtf):
         'Mean ± std over pallets. Raw data: `results/bench_*`.',
         '',
         '| Planner | Pallets | Seeds | Fill % | Boxes / pallet | Max height [m] | Collapses | '
-        'Rejected | Picks / min | Planning time [ms] | Cycle time [s] | Place err [mm] | '
-        'Mass err [kg] |',
-        '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+        'Lost boxes | Rejected | Picks / min | Planning time [ms] | Cycle time [s] | '
+        'Place err [mm] | Mass err [kg] |',
+        '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
     ]
     for p in planners:
         pallets, boxes = data[p]
@@ -102,6 +118,7 @@ def summary(planners, rtf):
             f'{ms([r["boxes"] for r in pallets])} | '
             f'{ms([r["max_height_m"] for r in pallets], "{:.2f}")} | '
             f'{sum(int(r["collapses"]) for r in pallets)} | '
+            f'{sum(int(r.get("lost_boxes") or 0) for r in pallets)} | '
             f'{sum(int(r["rejected"]) for r in pallets)} | '
             f'{ms([r["picks_per_min"] for r in pallets], "{:.2f}")} | '
             f'{ms([1000 * float(b["planning_time_s"]) for b in placed], "{:.0f}")} | '
@@ -149,13 +166,14 @@ def summarize_run(run, marker):
     lines = [begin, '',
              f'Run `{run}` (raw data: `results/{run}_*.csv`). Box outcomes: ' +
              ', '.join(f'{k} {v}' for k, v in sorted(outcomes.items())) + '.', '',
-             '| Pallet | Boxes | Rejected | Fill % | Max height [m] | Collapses | Duration [s] | '
-             'Picks/min | Mean planning [ms] | Mean place err [mm] | End |',
-             '|---|---|---|---|---|---|---|---|---|---|---|']
+             '| Pallet | Boxes | Rejected | Fill % | Max height [m] | Collapses | Lost boxes | '
+             'Duration [s] | Picks/min | Mean planning [ms] | Mean place err [mm] | End |',
+             '|---|---|---|---|---|---|---|---|---|---|---|---|']
     for r in pallets:
         lines.append(
             f'| {r["pallet"]} | {r["boxes"]} | {r["rejected"]} | {float(r["fill_percent"]):.1f} | '
-            f'{float(r["max_height_m"]):.2f} | {r["collapses"]} | {float(r["duration_s"]):.0f} | '
+            f'{float(r["max_height_m"]):.2f} | {r["collapses"]} | {r.get("lost_boxes", "")} | '
+            f'{float(r["duration_s"]):.0f} | '
             f'{float(r["picks_per_min"]):.2f} | '
             f'{1000 * float(r["mean_planning_time_s"] or 0):.0f} | '
             f'{float(r["mean_place_err_mm"] or 0):.2f} | {r["end_reason"]} |')

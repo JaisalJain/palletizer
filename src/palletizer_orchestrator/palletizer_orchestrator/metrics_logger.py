@@ -39,7 +39,7 @@ BOX_FIELDS = [
     'grasp_attempts', 'wall_time']
 PALLET_FIELDS = [
     'run', 'planner', 'seed', 'pallet', 'boxes', 'rejected', 'box_volume_m3', 'fill_percent',
-    'max_height_m', 'collapses', 'duration_s', 'picks_per_min', 'mean_planning_time_s',
+    'max_height_m', 'collapses', 'lost_boxes', 'duration_s', 'picks_per_min', 'mean_planning_time_s',
     'max_planning_time_s', 'mean_cycle_time_s', 'mean_place_err_mm', 'max_place_err_mm',
     'mean_mass_err_kg', 'end_reason', 'wall_time']
 
@@ -74,7 +74,11 @@ class MetricsLogger(Node):
         self.pending = []          # (due_time, report) waiting for the box to settle
         self.tracked = {}          # name -> reference pose (pos, quat) on the current pallet
         self.collapsed = set()
+        self.lost = set()          # boxes that left the belt/pallet (floor), whole run
+        self.lost_this_pallet = 0
         self.rows = []             # current pallet box rows
+        from palletizer_tools import cell_config
+        self.cell = cell_config.load()
         self.pallets_done = 0
         self.create_subscription(
             BoxSpec, '/sim/box_specs', lambda m: self.specs.__setitem__(m.name, m),
@@ -145,7 +149,23 @@ class MetricsLogger(Node):
                 self.collapsed.add(name)
                 self.get_logger().warn(f'COLLAPSE: {name} drifted {drift * 1000:.0f} mm')
 
+    def check_lost(self):
+        """Box ledger: any box below belt level that is not over the pallet fell off."""
+        belt = self.cell['conveyor']['belt_top_z']
+        pal = self.cell['pallet']
+        cx, cy = pal['center_xy']
+        hx, hy = pal['size'][0] / 2 + 0.05, pal['size'][1] / 2 + 0.05
+        for name, (pos, _) in self.poses.items():
+            if name in self.lost:
+                continue
+            over_pallet = abs(pos[0] - cx) <= hx and abs(pos[1] - cy) <= hy
+            if pos[2] < belt - 0.15 and not over_pallet:
+                self.lost.add(name)
+                self.lost_this_pallet += 1
+                self.get_logger().warn(f'LOST BOX: {name} fell off at {pos.round(2).tolist()}')
+
     def tick(self):
+        self.check_lost()
         now = time.monotonic()
         due = [x for x in self.pending if x[0] <= now]
         self.pending = [x for x in self.pending if x[0] > now]
@@ -174,6 +194,7 @@ class MetricsLogger(Node):
             'rejected': sum(1 for x in rows if x['success'] == 0),
             'box_volume_m3': r.box_volume, 'fill_percent': r.fill_percent,
             'max_height_m': r.max_height, 'collapses': len(self.collapsed),
+            'lost_boxes': self.lost_this_pallet,
             'duration_s': r.duration,
             'picks_per_min': 60.0 * r.boxes / r.duration if r.duration > 0 else 0.0,
             'mean_planning_time_s': float(np.mean(pt)) if pt else '',
@@ -192,6 +213,7 @@ class MetricsLogger(Node):
             f'collapses {len(self.collapsed)}, {row["picks_per_min"]:.2f} picks/min')
         self.tracked.clear()
         self.collapsed.clear()
+        self.lost_this_pallet = 0
 
 
 def main():

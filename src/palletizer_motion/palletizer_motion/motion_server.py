@@ -215,24 +215,24 @@ class MotionServer(Node):
         return math.atan2(tcp[1], tcp[0]) - q[0]
 
     def route_pan(self, q_goal):
-        """Choose the 2*pi branch of the goal pan so the TCP bearing sweeps through
-        swing_bearing (+x, downstream side) and never through the opposite direction."""
+        """Canonical pan for a goal: the TCP bearing (pan + offset) is wrapped into
+        (swing_bearing - pi, swing_bearing + pi]. Every routed goal is canonical and the
+        robot starts canonical (park), so a joint-space sweep between two goals never passes
+        the opposite bearing (the upstream -x side with the queued boxes). Choosing branches
+        relative to the current pan instead drifts by 2*pi over many cycles until the +x
+        branch is beyond the joint limit and the swing crosses the queue."""
         off = self.tcp_bearing_offset()
-        avoid = self.m['swing_bearing'] + math.pi
-        b0 = self.joints[0] + off
-        best = None
-        for k in (-2, -1, 0, 1, 2):
-            pan = q_goal[0] + 2 * math.pi * k
-            if not LOWER[0] <= pan <= UPPER[0]:
-                continue
-            b1 = pan + off
-            lo, hi = min(b0, b1), max(b0, b1)
-            crosses = any(lo < avoid + 2 * math.pi * m < hi for m in range(-3, 4))
-            cost = abs(pan - self.joints[0]) + (100.0 if crosses else 0.0)
-            if best is None or cost < best[0]:
-                best = (cost, pan)
+        s = self.m['swing_bearing']
+        b = q_goal[0] + off
+        b = s + ((b - s + math.pi) % (2 * math.pi)) - math.pi
+        if b <= s - math.pi:
+            b += 2 * math.pi
         q = q_goal.copy()
-        q[0] = best[1]
+        q[0] = b - off
+        b0 = self.joints[0] + off
+        if not (s - math.pi < b0 <= s + math.pi):
+            self.get_logger().warn(f'current pan {self.joints[0]:.2f} is not canonical '
+                                   f'(bearing {math.degrees(b0):.0f} deg)')
         return q
 
     def go_hub(self, target_xy, z, yaw):
@@ -290,19 +290,28 @@ class MotionServer(Node):
 
         self.feedback(gh, PickBox, 'tare F/T', 0.05)
         self.suction_pub.publish(Bool(data=False))
+        # The measured box is an obstacle until the final vertical descent onto its top.
+        tq = Rotation.from_euler('z', box.yaw).as_quat()
+        self.mv.add_objects([box_object(
+            'target_box', 'world', (box.length, box.width, box.height),
+            make_pose(top - [0, 0, box.height / 2], tq))])
         self.feedback(gh, PickBox, 'transit', 0.08)
         ok, msg = self.go_hub(pre[:2], max(self.hub_z(0.0), pre[2]), yaw)
         if not ok:
+            self.mv.remove_objects(['target_box'])
+            self.go_park()
             return self._fail(res, 'PLAN_FAILED', f'hub: {msg}')
         self.feedback(gh, PickBox, 'move to pre-grasp', 0.1)
-        ok, msg = self.ptp(q_pre)
+        ok, msg = self.ptp(self.route_pan(q_pre))
         if not ok:
+            self.mv.remove_objects(['target_box'])
             self.go_park()
             return self._fail(res, 'PLAN_FAILED', f'pre-grasp: {msg}')
         time.sleep(m['weigh_settle'])
         tare = self.mean_fz(m['weigh_window'])
         self.tare_fz = tare
 
+        self.mv.remove_objects(['target_box'])
         self.feedback(gh, PickBox, 'descend', 0.35)
         grasp = top + [0, 0, m['pick_gap']]
         ok, msg = self.descend(grasp, yaw)
@@ -348,7 +357,7 @@ class MotionServer(Node):
             if q_lift is None:
                 ok, msg = False, f'no IK for lift {lift.round(3)}'
             else:
-                ok, msg = self.ptp(q_lift)
+                ok, msg = self.ptp(self.route_pan(q_lift))
         if not ok:
             self.abort_grasp(pre, yaw)
             return self._fail(res, 'EXEC_FAILED', f'lift: {msg}')

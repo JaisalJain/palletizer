@@ -1,12 +1,17 @@
 """Zone conveyor controller driven only by photo-eyes (no ground truth).
 
 Zones (upstream -> downstream) come from cell_config conveyor.zones. Each zone has a photo-eye
-near its downstream end. Zero-pressure accumulation:
+near its downstream end. Zero-pressure accumulation, one box per downstream zone:
   - pick zone: runs while its eye is clear; stops when the eye becomes blocked and HOLDS
     until ~/resume. It never runs while its eye is blocked: a resume with the box still
     there keeps it in place (driving it into the end stop would rotate it and push the
     queue into it).
-  - other zones: run if their eye is clear or the next zone downstream is running.
+  - a zone releases a box into the next zone only when that zone is EMPTY. Occupancy is
+    counted from the eyes: a box enters zone i+1 when the eye of zone i goes blocked->clear,
+    and leaves the pick zone when the pick eye goes blocked->clear (picked or removed).
+    So a queued box always waits at its eye with the designed gap (>= 0.10 m) instead of
+    following the previous box into the pick zone.
+  - the infeed (first zone) may hold several boxes (the spawner keeps their gap).
   - ~/stop: maintenance stop of all zones until ~/resume.
 
 Topics out: /conveyor/<zone>/cmd_vel (Float64), ~/running (Bool, pick zone running),
@@ -40,6 +45,8 @@ class ConveyorController(Node):
         self.settle_time = cv['settle_time']
 
         self.blocked = {z: False for z in self.zones}
+        self.prev_blocked = {z: False for z in self.zones}
+        self.occupancy = {z: 0 for z in self.zones}   # boxes inside zones[1:] (from eyes)
         self.running = {z: True for z in self.zones}
         self.holding = False          # pick zone stopped for a box, waiting for resume
         self.maintenance_stop = False
@@ -63,17 +70,35 @@ class ConveyorController(Node):
         valid = [r for r in msg.ranges if math.isfinite(r) and msg.range_min <= r]
         self.blocked[zone] = bool(valid) and min(valid) < self.blocked_range
 
+    def update_occupancy(self):
+        for i, z in enumerate(self.zones):
+            if self.prev_blocked[z] and not self.blocked[z]:
+                # falling edge of the eye at the end of zone z: one box left zone z
+                # (into the next zone, or out of the cell at the pick eye)
+                if i > 0:
+                    self.occupancy[z] = max(0, self.occupancy[z] - 1)
+                if i + 1 < len(self.zones):
+                    self.occupancy[self.zones[i + 1]] += 1
+            self.prev_blocked[z] = self.blocked[z]
+        # a box standing at an eye is certainly inside that zone
+        for z in self.zones[1:]:
+            if self.blocked[z]:
+                self.occupancy[z] = max(self.occupancy[z], 1)
+
     def step(self):
+        self.update_occupancy()
         pick = self.zones[-1]
         # --- pick zone ---
         if not self.holding and self.blocked[pick]:
             self.holding = True
             self.get_logger().info('box at pick eye, holding pick zone')
         run = {pick: not self.holding and not self.maintenance_stop}
-        # --- upstream zones: run if eye clear or downstream zone running ---
+        # --- upstream zones: run while their eye is clear; release a box past the eye only
+        # into an empty, running downstream zone ---
         for i in range(len(self.zones) - 2, -1, -1):
-            z = self.zones[i]
-            run[z] = not self.maintenance_stop and (not self.blocked[z] or run[self.zones[i + 1]])
+            z, nxt = self.zones[i], self.zones[i + 1]
+            release = run[nxt] and self.occupancy[nxt] == 0
+            run[z] = not self.maintenance_stop and (not self.blocked[z] or release)
         self.running = run
         for z in self.zones:
             self.cmd_pubs[z].publish(Float64(data=self.speed if run[z] else 0.0))
@@ -88,7 +113,8 @@ class ConveyorController(Node):
         self.running_pub.publish(Bool(data=run[pick]))
         self.ready_pub.publish(Bool(data=ready))
         self.eyes_pub.publish(String(data=' '.join(
-            f'{z}={int(self.blocked[z])}' for z in self.zones)))
+            f'{z}={int(self.blocked[z])}' for z in self.zones) + ' occupancy ' + ' '.join(
+            f'{z}={self.occupancy[z]}' for z in self.zones[1:])))
 
     def on_resume(self, request, response):
         self.maintenance_stop = False

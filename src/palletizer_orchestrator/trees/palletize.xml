@@ -28,11 +28,16 @@
       <WaitBoxReady timeout="600"/>
 
       <Fallback name="Detect">
-        <RetryUntilSuccessful num_attempts="3">
-          <DetectBox box="{box}"/>
-        </RetryUntilSuccessful>
-        <Sequence name="RejectUndetectable">
+        <DetectBox box="{box}"/>
+        <Sequence name="ParkAndRedetect">
           <Park/>
+          <RetryUntilSuccessful num_attempts="3">
+            <Delay delay_msec="500">
+              <DetectBox box="{box}"/>
+            </Delay>
+          </RetryUntilSuccessful>
+        </Sequence>
+        <Sequence name="RejectUndetectable">
           <RejectPickZoneBox/>
           <ReportCycle outcome="rejected_detect"/>
           <ResumeConveyor/>

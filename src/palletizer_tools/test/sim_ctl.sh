@@ -19,6 +19,7 @@ stop() {
     kill -KILL -- "-$pgid" 2>/dev/null
     rm -f "$PIDFILE"
   fi
+  "$(dirname "${BASH_SOURCE[0]}")/kill_sim.sh"   # stragglers (gz, move_group) outlive the group
 }
 
 start() {
