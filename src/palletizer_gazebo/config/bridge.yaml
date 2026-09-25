@@ -1,0 +1,76 @@
+# ros_gz_bridge configuration for the palletizing cell.
+# World name "palletizing_cell" must match world_name in cell_config.yaml.
+
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+
+# ---- Overhead RGB-D camera ----
+- ros_topic_name: /overhead_camera/image
+  gz_topic_name: /overhead_camera/image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+- ros_topic_name: /overhead_camera/depth_image
+  gz_topic_name: /overhead_camera/depth_image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+# gz stamps the cloud with the optical frame but uses link axes; cloud_relay re-stamps it.
+- ros_topic_name: /overhead_camera/points_raw
+  gz_topic_name: /overhead_camera/points
+  ros_type_name: sensor_msgs/msg/PointCloud2
+  gz_type_name: gz.msgs.PointCloudPacked
+  direction: GZ_TO_ROS
+- ros_topic_name: /overhead_camera/camera_info
+  gz_topic_name: /overhead_camera/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+
+# ---- Ground-truth world poses of all box_* models (palletizer_gazebo::ModelPosePublisher) ----
+- ros_topic_name: /sim/box_poses
+  gz_topic_name: /sim/model_poses
+  ros_type_name: tf2_msgs/msg/TFMessage
+  gz_type_name: gz.msgs.Pose_V
+  direction: GZ_TO_ROS
+
+# ---- Conveyor belt velocity (m/s) ----
+- ros_topic_name: /conveyor/belt_cmd_vel
+  gz_topic_name: /model/conveyor/link/belt/track_cmd_vel
+  ros_type_name: std_msgs/msg/Float64
+  gz_type_name: gz.msgs.Double
+  direction: ROS_TO_GZ
+
+# ---- Suction gripper ----
+- ros_topic_name: /suction/cmd
+  gz_topic_name: /suction/cmd
+  ros_type_name: std_msgs/msg/Bool
+  gz_type_name: gz.msgs.Boolean
+  direction: ROS_TO_GZ
+- ros_topic_name: /suction/grasped
+  gz_topic_name: /suction/grasped
+  ros_type_name: std_msgs/msg/Bool
+  gz_type_name: gz.msgs.Boolean
+  direction: GZ_TO_ROS
+- ros_topic_name: /suction/attached_model
+  gz_topic_name: /suction/attached_model
+  ros_type_name: std_msgs/msg/String
+  gz_type_name: gz.msgs.StringMsg
+  direction: GZ_TO_ROS
+
+# ---- Entity services (used by box_spawner and tests) ----
+- service_name: /world/palletizing_cell/create
+  ros_type_name: ros_gz_interfaces/srv/SpawnEntity
+  gz_req_type_name: gz.msgs.EntityFactory
+  gz_rep_type_name: gz.msgs.Boolean
+- service_name: /world/palletizing_cell/remove
+  ros_type_name: ros_gz_interfaces/srv/DeleteEntity
+  gz_req_type_name: gz.msgs.Entity
+  gz_rep_type_name: gz.msgs.Boolean
+- service_name: /world/palletizing_cell/set_pose
+  ros_type_name: ros_gz_interfaces/srv/SetEntityPose
+  gz_req_type_name: gz.msgs.Pose
+  gz_rep_type_name: gz.msgs.Boolean

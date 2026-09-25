@@ -1,0 +1,82 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+    Property Tree Widget:
+      Expanded: ~
+    Help Height: 0
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Class: rviz_default_plugins/Grid
+      Name: Grid
+      Enabled: true
+      Reference Frame: world
+      Plane Cell Count: 10
+      Cell Size: 0.5
+      Color: 160; 160; 164
+    - Class: rviz_default_plugins/RobotModel
+      Name: RobotModel
+      Enabled: true
+      Description Source: Topic
+      Description Topic:
+        Value: /robot_description
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/TF
+      Name: TF
+      Enabled: true
+      Show Names: true
+      Show Axes: true
+      Show Arrows: false
+      Marker Scale: 0.4
+      Frames:
+        All Enabled: false
+        world: {Value: true}
+        base_link: {Value: true}
+        suction_tcp: {Value: true}
+        pick_zone: {Value: true}
+        pallet_origin: {Value: true}
+        overhead_camera_optical_frame: {Value: true}
+    - Class: rviz_default_plugins/PointCloud2
+      Name: OverheadCloud
+      Enabled: true
+      Topic:
+        Value: /overhead_camera/points
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+      Color Transformer: RGB8
+      Style: Points
+      Size (Pixels): 2
+      Decay Time: 0
+    - Class: rviz_default_plugins/Image
+      Name: OverheadRGB
+      Enabled: true
+      Topic:
+        Value: /overhead_camera/image
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Best Effort
+  Global Options:
+    Fixed Frame: world
+    Background Color: 48; 48; 48
+    Frame Rate: 30
+  Tools:
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Name: Current View
+      Distance: 5.5
+      Focal Point: {X: -0.5, Y: 0.1, Z: 0.6}
+      Pitch: 0.55
+      Yaw: 3.9
+    Saved: ~
+Window Geometry:
+  Width: 1400
+  Height: 900

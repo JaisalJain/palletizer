@@ -1,0 +1,282 @@
+<?xml version="1.0"?>
+<!--
+  Palletizing cell world. Rendered with xacro at launch time from cell_config.yaml:
+    xacro palletizing_cell.sdf.xacro cell_config:=<path> > palletizing_cell.sdf
+  Conveyor pattern from gz-sim8 worlds/conveyor.sdf (TrackController on a static belt link).
+  Collision shapes are plain boxes; visuals may be fancier.
+-->
+<sdf version="1.9" xmlns:xacro="http://wiki.ros.org/xacro">
+  <xacro:arg name="cell_config" default=""/>
+  <xacro:property name="cell" value="${xacro.load_yaml('$(arg cell_config)')}"/>
+  <xacro:property name="cv" value="${cell['conveyor']}"/>
+  <xacro:property name="pal" value="${cell['pallet']}"/>
+  <xacro:property name="cam" value="${cell['camera']}"/>
+
+  <xacro:macro name="box_inertia" params="m x y z">
+    <inertial>
+      <mass>${m}</mass>
+      <inertia>
+        <ixx>${m * (y * y + z * z) / 12}</ixx><ixy>0</ixy><ixz>0</ixz>
+        <iyy>${m * (x * x + z * z) / 12}</iyy><iyz>0</iyz>
+        <izz>${m * (x * x + y * y) / 12}</izz>
+      </inertia>
+    </inertial>
+  </xacro:macro>
+
+  <xacro:macro name="material" params="rgba">
+    <material>
+      <ambient>${rgba[0]} ${rgba[1]} ${rgba[2]} ${rgba[3]}</ambient>
+      <diffuse>${rgba[0]} ${rgba[1]} ${rgba[2]} ${rgba[3]}</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+    </material>
+  </xacro:macro>
+
+  <!-- visual-only box -->
+  <xacro:macro name="vbox" params="name x y z sx sy sz rgba">
+    <visual name="${name}">
+      <pose>${x} ${y} ${z} 0 0 0</pose>
+      <geometry><box><size>${sx} ${sy} ${sz}</size></box></geometry>
+      <xacro:material rgba="${rgba}"/>
+    </visual>
+  </xacro:macro>
+
+  <world name="${cell['world_name']}">
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <!-- Ground-truth poses of all box_* models (names preserved through the ROS bridge) -->
+    <plugin filename="palletizer_model_pose_publisher" name="palletizer_gazebo::ModelPosePublisher">
+      <model_prefix>box_</model_prefix>
+      <topic>/sim/model_poses</topic>
+      <frame_id>world</frame_id>
+      <update_rate>30</update_rate>
+    </plugin>
+
+    <scene>
+      <ambient>0.5 0.5 0.5 1</ambient>
+      <background>0.75 0.8 0.85 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.85 0.85 0.85 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.4 0.2 -0.9</direction>
+    </light>
+    <light type="point" name="cell_light">
+      <cast_shadows>false</cast_shadows>
+      <pose>0 0.3 3.5 0 0 0</pose>
+      <diffuse>0.5 0.5 0.5 1</diffuse>
+      <specular>0.1 0.1 0.1 1</specular>
+      <attenuation><range>12</range><constant>0.5</constant><linear>0.05</linear><quadratic>0.01</quadratic></attenuation>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+        </collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+          <xacro:material rgba="${[0.55, 0.55, 0.52, 1]}"/>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================ Conveyor ============================ -->
+    <xacro:property name="cv_len" value="${cv['x_end'] - cv['x_start']}"/>
+    <xacro:property name="cv_cx" value="${(cv['x_end'] + cv['x_start']) / 2}"/>
+    <xacro:property name="belt_z" value="${cv['belt_top_z'] - cv['belt_thickness'] / 2}"/>
+    <xacro:property name="frame_h" value="${cv['belt_top_z'] - cv['belt_thickness']}"/>
+    <model name="conveyor">
+      <static>true</static>
+      <pose>${cv_cx} ${cv['y']} 0 0 0 0</pose>
+      <!-- Belt: TrackController moves the contact surface, not the link -->
+      <link name="belt">
+        <pose>0 0 ${belt_z} 0 0 0</pose>
+        <xacro:box_inertia m="20" x="${cv_len}" y="${cv['belt_width']}" z="${cv['belt_thickness']}"/>
+        <collision name="belt_collision">
+          <geometry><box><size>${cv_len} ${cv['belt_width']} ${cv['belt_thickness']}</size></box></geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>0.7</mu>
+                <mu2>150</mu2>
+                <fdir1>0 1 0</fdir1>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="belt_visual">
+          <geometry><box><size>${cv_len} ${cv['belt_width']} ${cv['belt_thickness']}</size></box></geometry>
+          <xacro:material rgba="${cv['belt_color']}"/>
+        </visual>
+        <visual name="roller_in">
+          <pose>${-cv_len / 2} 0 0 ${pi / 2} 0 0</pose>
+          <geometry><cylinder><radius>${cv['belt_thickness'] / 2}</radius><length>${cv['belt_width'] + 0.04}</length></cylinder></geometry>
+          <xacro:material rgba="${cv['frame_color']}"/>
+        </visual>
+        <visual name="roller_out">
+          <pose>${cv_len / 2} 0 0 ${pi / 2} 0 0</pose>
+          <geometry><cylinder><radius>${cv['belt_thickness'] / 2}</radius><length>${cv['belt_width'] + 0.04}</length></cylinder></geometry>
+          <xacro:material rgba="${cv['frame_color']}"/>
+        </visual>
+      </link>
+      <plugin filename="gz-sim-track-controller-system" name="gz::sim::systems::TrackController">
+        <link>belt</link>
+        <odometry_publish_frequency>0</odometry_publish_frequency>
+      </plugin>
+
+      <!-- Frame: side rails below belt level + legs (visual) and one collision block -->
+      <link name="frame">
+        <collision name="frame_collision">
+          <pose>0 0 ${frame_h / 2} 0 0 0</pose>
+          <geometry><box><size>${cv_len} ${cv['belt_width']} ${frame_h}</size></box></geometry>
+        </collision>
+        <xacro:vbox name="rail_left" x="0" y="${cv['belt_width'] / 2 + 0.03}" z="${belt_z}"
+                    sx="${cv_len}" sy="0.04" sz="${cv['belt_thickness'] + 0.02}" rgba="${cv['frame_color']}"/>
+        <xacro:vbox name="rail_right" x="0" y="${-cv['belt_width'] / 2 - 0.03}" z="${belt_z}"
+                    sx="${cv_len}" sy="0.04" sz="${cv['belt_thickness'] + 0.02}" rgba="${cv['frame_color']}"/>
+        <xacro:macro name="leg_pair" params="i x">
+          <xacro:vbox name="leg_l_${i}" x="${x}" y="${cv['belt_width'] / 2 + 0.03}" z="${frame_h / 2}"
+                      sx="0.05" sy="0.05" sz="${frame_h}" rgba="${cv['frame_color']}"/>
+          <xacro:vbox name="leg_r_${i}" x="${x}" y="${-cv['belt_width'] / 2 - 0.03}" z="${frame_h / 2}"
+                      sx="0.05" sy="0.05" sz="${frame_h}" rgba="${cv['frame_color']}"/>
+        </xacro:macro>
+        <xacro:leg_pair i="0" x="${-cv_len / 2 + 0.1}"/>
+        <xacro:leg_pair i="1" x="${0}"/>
+        <xacro:leg_pair i="2" x="${cv_len / 2 - 0.1}"/>
+      </link>
+
+      <!-- End stop at the downstream end so nothing rides off the belt -->
+      <link name="end_stop">
+        <pose>${cv_len / 2 + 0.02} 0 ${cv['belt_top_z'] + 0.04} 0 0 0</pose>
+        <collision name="end_stop_collision">
+          <geometry><box><size>0.04 ${cv['belt_width'] + 0.1} 0.18</size></box></geometry>
+        </collision>
+        <visual name="end_stop_visual">
+          <geometry><box><size>0.04 ${cv['belt_width'] + 0.1} 0.18</size></box></geometry>
+          <xacro:material rgba="${[0.9, 0.75, 0.1, 1]}"/>
+        </visual>
+      </link>
+    </model>
+
+    <!-- Pick-zone floor marking on the belt (visual only, no collision) -->
+    <model name="pick_zone_marker">
+      <static>true</static>
+      <pose>${cell['pick_zone']['xyz'][0]} ${cell['pick_zone']['xyz'][1]} ${cell['pick_zone']['xyz'][2] + 0.0005} 0 0 0</pose>
+      <link name="link">
+        <visual name="stripe_up">
+          <pose>-0.3 0 0 0 0 0</pose>
+          <geometry><box><size>0.015 ${cv['belt_width']} 0.001</size></box></geometry>
+          <xacro:material rgba="${[0.9, 0.75, 0.1, 1]}"/>
+        </visual>
+        <visual name="stripe_down">
+          <pose>0.3 0 0 0 0 0</pose>
+          <geometry><box><size>0.015 ${cv['belt_width']} 0.001</size></box></geometry>
+          <xacro:material rgba="${[0.9, 0.75, 0.1, 1]}"/>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================ EUR pallet ============================ -->
+    <xacro:property name="px" value="${pal['size'][0]}"/>
+    <xacro:property name="py" value="${pal['size'][1]}"/>
+    <xacro:property name="pz" value="${pal['size'][2]}"/>
+    <xacro:property name="wood" value="${[0.72, 0.56, 0.36, 1]}"/>
+    <model name="pallet">
+      <static>true</static>
+      <pose>${pal['center_xy'][0]} ${pal['center_xy'][1]} 0 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <pose>0 0 ${pz / 2} 0 0 0</pose>
+          <geometry><box><size>${px} ${py} ${pz}</size></box></geometry>
+          <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
+        </collision>
+        <!-- top deck: 5 boards along x -->
+        <xacro:macro name="deck_board" params="i">
+          <xacro:vbox name="deck_${i}" x="0" y="${-py / 2 + 0.05 + i * (py - 0.1) / 4}" z="${pz - 0.011}"
+                      sx="${px}" sy="0.1" sz="0.022" rgba="${wood}"/>
+        </xacro:macro>
+        <xacro:deck_board i="0"/><xacro:deck_board i="1"/><xacro:deck_board i="2"/>
+        <xacro:deck_board i="3"/><xacro:deck_board i="4"/>
+        <!-- stringer boards + blocks -->
+        <xacro:macro name="block_row" params="j">
+          <xacro:property name="yy" value="${-py / 2 + 0.05 + j * (py - 0.1) / 2}"/>
+          <xacro:vbox name="stringer_${j}" x="0" y="${yy}" z="${pz - 0.022 - 0.011}" sx="${px}" sy="0.1" sz="0.022" rgba="${wood}"/>
+          <xacro:vbox name="block_${j}_0" x="${-px / 2 + 0.05}" y="${yy}" z="${0.022 + 0.039}" sx="0.1" sy="0.1" sz="0.078" rgba="${wood}"/>
+          <xacro:vbox name="block_${j}_1" x="0" y="${yy}" z="${0.022 + 0.039}" sx="0.14" sy="0.1" sz="0.078" rgba="${wood}"/>
+          <xacro:vbox name="block_${j}_2" x="${px / 2 - 0.05}" y="${yy}" z="${0.022 + 0.039}" sx="0.1" sy="0.1" sz="0.078" rgba="${wood}"/>
+          <xacro:vbox name="bottom_${j}" x="0" y="${yy}" z="0.011" sx="${px}" sy="0.1" sz="0.022" rgba="${wood}"/>
+        </xacro:macro>
+        <xacro:block_row j="0"/><xacro:block_row j="1"/><xacro:block_row j="2"/>
+      </link>
+    </model>
+
+    <!-- ===================== Camera mast + overhead RGB-D ===================== -->
+    <xacro:property name="mast_h" value="${cam['mast_size'][2]}"/>
+    <xacro:property name="arm_len" value="${max(cam['mast_xy'][1] - cam['xyz'][1], cam['xyz'][1] - cam['mast_xy'][1]) + 0.1}"/>
+    <xacro:property name="steel" value="${[0.2, 0.22, 0.25, 1]}"/>
+    <model name="camera_mast">
+      <static>true</static>
+      <link name="mast">
+        <pose>${cam['mast_xy'][0]} ${cam['mast_xy'][1]} 0 0 0 0</pose>
+        <collision name="post_collision">
+          <pose>0 0 ${mast_h / 2} 0 0 0</pose>
+          <geometry><box><size>${cam['mast_size'][0]} ${cam['mast_size'][1]} ${mast_h}</size></box></geometry>
+        </collision>
+        <xacro:vbox name="post" x="0" y="0" z="${mast_h / 2}" sx="${cam['mast_size'][0]}" sy="${cam['mast_size'][1]}" sz="${mast_h}" rgba="${steel}"/>
+        <xacro:vbox name="foot" x="0" y="0" z="0.01" sx="0.4" sy="0.4" sz="0.02" rgba="${steel}"/>
+        <xacro:vbox name="arm" x="0" y="${(cam['xyz'][1] - cam['mast_xy'][1]) / 2}" z="${cam['xyz'][2] + 0.06}"
+                    sx="0.06" sy="${arm_len}" sz="0.06" rgba="${steel}"/>
+      </link>
+      <link name="overhead_camera_link">
+        <pose>${cam['xyz'][0]} ${cam['xyz'][1]} ${cam['xyz'][2]} ${cam['rpy'][0]} ${cam['rpy'][1]} ${cam['rpy'][2]}</pose>
+        <visual name="housing">
+          <pose>-0.02 0 0 0 0 0</pose>
+          <geometry><box><size>0.04 0.12 0.04</size></box></geometry>
+          <xacro:material rgba="${[0.1, 0.1, 0.1, 1]}"/>
+        </visual>
+        <sensor name="overhead_rgbd" type="rgbd_camera">
+          <always_on>true</always_on>
+          <update_rate>${cam['rate']}</update_rate>
+          <topic>overhead_camera</topic>
+          <gz_frame_id>overhead_camera_optical_frame</gz_frame_id>
+          <camera>
+            <horizontal_fov>${cam['hfov']}</horizontal_fov>
+            <image>
+              <width>${cam['width']}</width>
+              <height>${cam['height']}</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip>
+              <near>${cam['near']}</near>
+              <far>${cam['far']}</far>
+            </clip>
+            <depth_camera>
+              <clip>
+                <near>${cam['near']}</near>
+                <far>${cam['far']}</far>
+              </clip>
+            </depth_camera>
+          </camera>
+        </sensor>
+      </link>
+      <joint name="camera_mount" type="fixed">
+        <parent>mast</parent>
+        <child>overhead_camera_link</child>
+      </joint>
+    </model>
+  </world>
+</sdf>
