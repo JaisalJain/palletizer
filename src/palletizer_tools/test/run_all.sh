@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # Runs all v0 tests: build test, then starts a headless sim and runs tests 2-5.
 # Usage: source install/setup.bash && src/palletizer_tools/test/run_all.sh
+# Environment: ROS, then the project venv (pybullet/gymnasium), then the workspace overlay.
+WS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+source /opt/ros/jazzy/setup.bash
+source "$WS_ROOT/.venv/bin/activate"
+[[ -f $WS_ROOT/install/setup.bash ]] && source "$WS_ROOT/install/setup.bash"
 set -u
 DIR=$(cd "$(dirname "$0")" && pwd)
 LOG=${PALLETIZER_SIM_LOG:-/tmp/palletizer_sim.log}

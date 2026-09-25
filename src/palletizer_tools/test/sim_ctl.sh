@@ -2,6 +2,11 @@
 # Start/stop a headless palletizer sim for the tests.
 #   sim_ctl.sh start [log]   -> launches palletizer_bringup gui:=false spawn_rate:=0, waits until ready
 #   sim_ctl.sh stop
+# Environment: ROS, then the project venv (pybullet/gymnasium), then the workspace overlay.
+WS_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
+source /opt/ros/jazzy/setup.bash
+source "$WS_ROOT/.venv/bin/activate"
+[[ -f $WS_ROOT/install/setup.bash ]] && source "$WS_ROOT/install/setup.bash"
 set -u
 PIDFILE=/tmp/palletizer_sim.pid
 
