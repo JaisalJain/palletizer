@@ -12,8 +12,9 @@ robot:
     size: [0.25, 0.25, 0.70]      # x, y, z; base_link sits on top of it
     xy: [0.0, 0.0]
     mass: 80.0
-  # Joint home pose: pan toward the conveyor, arm folded above the pick zone.
-  home: [1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+  # Joint home pose: arm parked over the pallet side, out of the overhead camera's view,
+  # suction cup pointing down. (pan = +pi/2 would put the same pose above the pick zone.)
+  home: [-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
 
 gripper:
   body_radius: 0.04               # suction body cylinder
