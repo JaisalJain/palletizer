@@ -32,6 +32,7 @@ install(PROGRAMS
   scripts/metrics_logger
   scripts/benchmark
   scripts/pick_place_test
+  scripts/status_overlay
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

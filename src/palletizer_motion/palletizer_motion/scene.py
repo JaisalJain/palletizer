@@ -1,11 +1,13 @@
-"""Static collision objects of the cell, all from cell_config.yaml (simple boxes)."""
+"""Static collision objects of the cell, all from cell_config.yaml (simple boxes).
+
+No pallet here: the pallet at the station is measured (pallet_perception) and added by the
+motion server's /motion/scene/set_pallet."""
 
 from palletizer_motion.moveit_client import box_object, make_pose
 
 
 def static_objects(cell, frame='world'):
     cv = cell['conveyor']
-    pal = cell['pallet']
     cam = cell['camera']
     objs = []
 
@@ -26,12 +28,18 @@ def static_objects(cell, frame='world'):
         for side, dy in (('e', -cv['belt_width'] / 2 - off), ('r', cv['belt_width'] / 2 + off)):
             add(f'eye_{z["name"]}_{side}', (0.04, 0.04, 0.06),
                 (z['eye_x'], cv['y'] + dy, cv['belt_top_z'] + eye['height']))
-    add('pallet', tuple(pal['size']),
-        (pal['center_xy'][0], pal['center_xy'][1], pal['size'][2] / 2))
     mx, my = cam['mast_xy']
     msx, msy, msz = cam['mast_size']
     add('camera_mast', (msx + 0.02, msy + 0.02, msz), (mx, my, msz / 2))
     arm_len = abs(my - cam['xyz'][1]) + 0.1
     add('camera_arm', (0.08, arm_len, 0.08), (mx, (my + cam['xyz'][1]) / 2, cam['xyz'][2] + 0.06))
     add('camera_head', (0.08, 0.14, 0.08), tuple(cam['xyz']))
+    pc = cell['pallet_camera']
+    mx, my = pc['mast_xy']
+    msx, msy, msz = pc['mast_size']
+    add('pallet_camera_mast', (msx + 0.02, msy + 0.02, msz), (mx, my, msz / 2))
+    arm_len = abs(my - pc['xyz'][1]) + 0.1
+    add('pallet_camera_arm', (0.08, arm_len, 0.08),
+        (mx, (my + pc['xyz'][1]) / 2, pc['xyz'][2] + 0.06))
+    add('pallet_camera_head', (0.14, 0.08, 0.08), tuple(pc['xyz']))
     return objs

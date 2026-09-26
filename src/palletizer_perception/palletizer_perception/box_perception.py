@@ -97,7 +97,8 @@ class BoxPerception(Node):
 
     # ---------------------------------------------------------------- detection
     def robot_in_view(self):
-        """Name of a robot link hanging over the pick ROI (from TF), or ''."""
+        """Name of a tool link hanging over the pick ROI (from TF), or ''. (Higher arm links
+        are caught by occluded(): they matter only if they actually cover the ROI.)"""
         p = self.cell['perception']
         m = p['occlusion_margin']
         x0, x1 = self.det.roi_x[0] - m, self.det.roi_x[1] + m
@@ -134,6 +135,8 @@ class BoxPerception(Node):
         stack = np.stack(fresh[-self.n_frames:])
         with np.errstate(invalid='ignore'):
             depth = np.nanmean(np.where(np.isfinite(stack), stack, np.nan), axis=0)
+        if self.det.occluded(depth):
+            return False, 'robot in the camera view (something above the pick ROI)', DetectedBox()
         faces, _ = self.det.detect(depth, self.rgb)
         face = self.det.pick_candidate(faces)
         if face is None:

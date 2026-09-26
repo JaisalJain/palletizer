@@ -14,12 +14,22 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   msg/Placement.msg
   msg/CycleReport.msg
   msg/PalletReport.msg
+  msg/DetectedPallet.msg
+  msg/HeightMap.msg
+  msg/PlacementCheck.msg
+  msg/StackEvent.msg
+  msg/PackingState.msg
+  msg/PalletStatus.msg
   srv/DetectBox.srv
   srv/PlanPlacement.srv
   srv/CommitPlacement.srv
   srv/Weigh.srv
+  srv/MeasurePallet.srv
+  srv/SetPallet.srv
+  srv/VerifyPlacement.srv
   action/PickBox.action
   action/PlaceBox.action
+  action/PalletExchange.action
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs action_msgs
 )
 

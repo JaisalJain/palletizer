@@ -13,7 +13,7 @@
   <xacro:property name="cell" value="${xacro.load_yaml('$(arg cell_config)')}"/>
   <xacro:property name="ur_type" value="${cell['robot']['ur_type']}"/>
   <xacro:property name="ped" value="${cell['robot']['pedestal']}"/>
-  <xacro:property name="home" value="${cell['robot']['home']}"/>
+  <xacro:property name="home" value="${cell['robot']['park']}"/>
 
   <xacro:include filename="$(find ur_description)/urdf/ur_macro.xacro"/>
   <xacro:include filename="$(find palletizer_description)/urdf/suction_gripper.xacro"/>

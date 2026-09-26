@@ -14,7 +14,8 @@ from rclpy.action import ActionClient
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from ros_gz_interfaces.msg import Entity
-from ros_gz_interfaces.srv import DeleteEntity, SpawnEntity
+from palletizer_interfaces.action import PalletExchange
+from ros_gz_interfaces.srv import DeleteEntity, SetEntityPose, SpawnEntity
 from scipy.spatial.transform import Rotation
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, String
@@ -40,6 +41,8 @@ class SimClient(Node):
         self.joints = None
         self.box_poses = {}
         self.box_poses_received = False
+        self.pallet_poses = {}
+        self.mover_state = ''
         self.grasped = None
         self.attached = None
         self.belt_running = None
@@ -47,6 +50,8 @@ class SimClient(Node):
 
         self.create_subscription(JointState, '/joint_states', self._on_js, 10)
         self.create_subscription(TFMessage, '/sim/box_poses', self._on_boxes, 10)
+        self.create_subscription(TFMessage, '/sim/pallet_poses', self._on_pallets, 10)
+        self.create_subscription(String, '/sim/pallet_mover/state', self._on_mover, 10)
         self.create_subscription(Bool, '/suction/grasped', self._on_grasped, 10)
         self.create_subscription(String, '/suction/attached_model', self._on_attached, 10)
         self.create_subscription(Bool, '/conveyor_controller/running', self._on_running, 10)
@@ -57,6 +62,8 @@ class SimClient(Node):
         self.list_ctrl = self.create_client(ListControllers, '/controller_manager/list_controllers')
         self.spawn_cli = self.create_client(SpawnEntity, f'/world/{self.world}/create')
         self.delete_cli = self.create_client(DeleteEntity, f'/world/{self.world}/remove')
+        self.set_pose_cli = self.create_client(SetEntityPose, f'/world/{self.world}/set_pose')
+        self.exchange_client = ActionClient(self, PalletExchange, '/pallet_exchange')
         self.spawn_box_cli = self.create_client(Trigger, '/box_spawner/spawn_box')
         self.resume_cli = self.create_client(Trigger, '/conveyor_controller/resume')
         self.stop_cli = self.create_client(Trigger, '/conveyor_controller/stop')
@@ -83,6 +90,12 @@ class SimClient(Node):
     def _on_boxes(self, msg):
         self.box_poses = boxes.poses_from_tf(msg)
         self.box_poses_received = True
+
+    def _on_pallets(self, msg):
+        self.pallet_poses = boxes.poses_from_tf(msg, prefix='pallet_')
+
+    def _on_mover(self, msg):
+        self.mover_state = msg.data
 
     def _on_grasped(self, msg):
         self.grasped = msg.data
@@ -154,7 +167,8 @@ class SimClient(Node):
         return self.tcp_pose()
 
     def home(self):
-        return self.move_joints(self.cell['robot']['home'])
+        """Park pose (out of both camera views)."""
+        return self.move_joints(self.cell['robot']['park'])
 
     def pick_approach_joints(self):
         """Home pose mirrored toward the conveyor (arm above the pick zone)."""
@@ -182,6 +196,39 @@ class SimClient(Node):
             raise RuntimeError(f'spawn of {name} failed')
         if not self.wait_for(lambda: name in self.box_poses, 5.0):
             raise RuntimeError(f'{name} never appeared in /sim/box_poses')
+
+    def set_pose(self, name, xyz, yaw=0.0):
+        """Teleport a model (tests only, e.g. shove a placed box)."""
+        req = SetEntityPose.Request()
+        req.entity.name = name
+        req.entity.type = Entity.MODEL
+        req.pose.position.x, req.pose.position.y, req.pose.position.z = map(float, xyz)
+        q = boxes.yaw_quaternion(yaw)
+        o = req.pose.orientation
+        o.x, o.y, o.z, o.w = q
+        return self.call(self.set_pose_cli, req).success
+
+    def station_pallet(self):
+        """(name, xyz, yaw) of the pallet at the station (ground truth), or None."""
+        c = np.array(self.cell['pallet_station']['center_xy'])
+        for name, (xyz, quat) in self.pallet_poses.items():
+            if np.linalg.norm(xyz[:2] - c) < 0.5:
+                return name, xyz, Rotation.from_quat(quat).as_euler('xyz')[2]
+        return None
+
+    def exchange_pallet(self, pallet_type='', timeout=180.0, feedback=None):
+        """Run one pallet exchange (pallet_exchanger). Returns the action result."""
+        if not self.exchange_client.wait_for_server(timeout_sec=10.0):
+            raise RuntimeError('/pallet_exchange not available')
+        goal = PalletExchange.Goal()
+        goal.pallet_type = pallet_type
+        send = self.exchange_client.send_goal_async(goal, feedback_callback=feedback)
+        if not self.wait_for(send.done, 10.0) or not send.result().accepted:
+            raise RuntimeError('exchange goal rejected')
+        res = send.result().get_result_async()
+        if not self.wait_for(res.done, timeout):
+            raise RuntimeError('exchange timed out')
+        return res.result().result
 
     def box_top_center(self, name, height):
         pos, quat = self.box_poses[name]

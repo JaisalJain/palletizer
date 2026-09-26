@@ -1,13 +1,16 @@
 <?xml version="1.0"?>
 <!--
-  Palletizing loop. Open in Groot2 (live: connect to port 1667 while the orchestrator runs).
-  Blackboard: box (DetectedBox), pre / placement (Placement), mass (kg), sim_name (eval only).
+  Palletizing loop (mode mixed and single_sku; the orchestrator's `mode` selects the packing
+  behaviour behind PlanPlacement / PalletFull). Open in Groot2 (live: port 1667).
+  Blackboard: box (DetectedBox), pre / placement (Placement), mass (kg), reason (why the pallet
+  is closed), sim_name (evaluation only).
 -->
 <root BTCPP_format="4" main_tree_to_execute="Palletize">
 
   <BehaviorTree ID="Palletize">
     <Sequence>
       <Park/>
+      <SubTree ID="NewPallet"/>
       <ResumeConveyor/>
       <Fallback>
         <KeepRunningUntilFailure>
@@ -20,6 +23,30 @@
         </KeepRunningUntilFailure>
         <AlwaysSuccess/>
       </Fallback>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- Exchange handshake: arm parked, old pallet forgotten, EXCHANGING -> PalletExchange
+       action -> READY -> new pallet measured (dims, pose) and handed to packing and the
+       planning scene -> EMPTY. -->
+  <BehaviorTree ID="NewPallet">
+    <Sequence>
+      <Park/>
+      <ResetPalletModels/>
+      <PalletExchange/>
+      <RetryUntilSuccessful num_attempts="3">
+        <MeasurePallet/>
+      </RetryUntilSuccessful>
+    </Sequence>
+  </BehaviorTree>
+
+  <!-- The orchestrator decided the pallet is FULL ({reason}). -->
+  <BehaviorTree ID="ClosePallet">
+    <Sequence>
+      <Park/>
+      <VerifyPlacement/>
+      <FinishPallet reason="{reason}"/>
+      <SubTree ID="NewPallet"/>
     </Sequence>
   </BehaviorTree>
 
@@ -45,11 +72,16 @@
         </Sequence>
       </Fallback>
 
+      <!-- Fits on this pallet? (single_sku: same SKU and a slot left) Else close the pallet
+           (NO_FEASIBLE_PLACEMENT / HEIGHT_LIMIT / SKU_CHANGE) and start the next one with
+           this box. A box that does not fit an empty pallet is rejected. -->
       <Fallback name="PreCheckFit">
-        <PlanPlacement box="{box}" mass="0" check_only="true" placement="{pre}"/>
-        <Sequence name="PalletFullBeforePick">
-          <SubTree ID="PalletSwap"/>
-          <PlanPlacement box="{box}" mass="0" check_only="true" placement="{pre}"/>
+        <PlanPlacement box="{box}" mass="0" check_only="true" placement="{pre}" reason="{reason}"/>
+        <Sequence name="CloseAndRetry">
+          <IsPalletStarted/>
+          <SubTree ID="ClosePallet" reason="{reason}"/>
+          <PlanPlacement box="{box}" mass="0" check_only="true" placement="{pre}"
+                         reason="{reason}"/>
         </Sequence>
         <Sequence name="NeverFits">
           <RejectPickZoneBox/>
@@ -59,26 +91,37 @@
         </Sequence>
       </Fallback>
 
-      <Fallback name="Grasp">
-        <RetryUntilSuccessful num_attempts="2">
-          <PickBox box="{box}" mass="{mass}" sim_name="{sim_name}"/>
-        </RetryUntilSuccessful>
-        <Sequence name="RejectUngraspable">
-          <Park/>
-          <RejectPickZoneBox/>
-          <ReportCycle outcome="rejected_grasp" box="{box}"/>
-          <ResumeConveyor/>
-          <AlwaysFailure/>
-        </Sequence>
-      </Fallback>
+      <!-- Pick, and meanwhile measure the previous placement (the arm is over the conveyor,
+           the pallet camera sees the stack) and plan this box on the perceived stack. -->
+      <Parallel success_count="-1" failure_count="1">
+        <Fallback name="Grasp">
+          <RetryUntilSuccessful num_attempts="2">
+            <PickBox box="{box}" mass="{mass}" sim_name="{sim_name}"/>
+          </RetryUntilSuccessful>
+          <Sequence name="RejectUngraspable">
+            <Park/>
+            <RejectPickZoneBox/>
+            <ReportCycle outcome="rejected_grasp" box="{box}"/>
+            <ResumeConveyor/>
+            <AlwaysFailure/>
+          </Sequence>
+        </Fallback>
+        <ForceSuccess>
+          <Sequence name="PlanWhilePicking">
+            <VerifyPlacement/>
+            <PlanPlacement box="{box}" mass="0" placement="{placement}" reason="{reason}"/>
+          </Sequence>
+        </ForceSuccess>
+      </Parallel>
 
       <ResumeConveyor/>
 
-      <Fallback name="PlanWithMeasuredMass">
-        <PlanPlacement box="{box}" mass="{mass}" placement="{placement}"/>
-        <Sequence name="PalletFullAfterWeighing">
-          <SubTree ID="PalletSwap"/>
-          <PlanPlacement box="{box}" mass="{mass}" placement="{placement}"/>
+      <Fallback name="CheckWithMeasuredMass">
+        <PlanPlacement box="{box}" mass="{mass}" recheck="true" placement="{placement}"
+                       reason="{reason}"/>
+        <Sequence name="CloseWhileHolding">
+          <SubTree ID="ClosePallet" reason="{reason}"/>
+          <PlanPlacement box="{box}" mass="{mass}" placement="{placement}" reason="{reason}"/>
         </Sequence>
       </Fallback>
 
@@ -88,7 +131,15 @@
           <VerifyRelease max_mass="0.3"/>
         </Sequence>
         <Sequence name="ReplanElsewhere">
-          <PlanPlacement box="{box}" mass="{mass}" exclude="{placement}" placement="{placement}"/>
+          <PlanPlacement box="{box}" mass="{mass}" exclude="{placement}" placement="{placement}"
+                         reason="{reason}"/>
+          <PlaceBox box="{box}" placement="{placement}"/>
+          <VerifyRelease max_mass="0.3"/>
+        </Sequence>
+        <Sequence name="CloseAndPlaceOnNext">
+          <IsPalletStarted/>
+          <SubTree ID="ClosePallet" reason="{reason}"/>
+          <PlanPlacement box="{box}" mass="{mass}" placement="{placement}" reason="{reason}"/>
           <PlaceBox box="{box}" placement="{placement}"/>
           <VerifyRelease max_mass="0.3"/>
         </Sequence>
@@ -103,15 +154,14 @@
       <CommitPlacement box="{box}" placement="{placement}" mass="{mass}" sim_name="{sim_name}"/>
       <ReportCycle outcome="placed" box="{box}" placement="{placement}" mass="{mass}"
                    sim_name="{sim_name}"/>
-    </Sequence>
-  </BehaviorTree>
 
-  <BehaviorTree ID="PalletSwap">
-    <Sequence>
-      <FinishPallet reason="full"/>
-      <ClearPallet/>
-      <ResetPackingModel/>
-      <ClearPlanningScene/>
+      <!-- Pallet full? (pattern complete / operator) -->
+      <Fallback name="FullCheck">
+        <Inverter>
+          <PalletFull reason="{reason}"/>
+        </Inverter>
+        <SubTree ID="ClosePallet" reason="{reason}"/>
+      </Fallback>
     </Sequence>
   </BehaviorTree>
 </root>

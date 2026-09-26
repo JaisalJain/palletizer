@@ -1,0 +1,9 @@
+# Pallet conveyor: move the full pallet (with its boxes) out and a new empty one in.
+string pallet_type        # SIM ONLY: '' = next in the exchanger's order (the robot sends '')
+---
+bool success
+string message
+string sim_pallet_name    # SIM ONLY (evaluation)
+---
+string phase
+float32 progress

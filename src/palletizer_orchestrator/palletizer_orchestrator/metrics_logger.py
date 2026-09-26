@@ -1,15 +1,20 @@
 """Metrics logger + collapse detector (EVALUATION ONLY - uses ground truth).
 
 Inputs: /orchestrator/cycle_report, /orchestrator/pallet_report (from the orchestrator),
+        /pallet_perception/placement_check, /pallet_perception/stack_events (the robot's own
+        placement verification and collapse detection, evaluated here),
         /sim/box_specs, /sim/box_poses (ground truth).
 Outputs (CSV in results_dir):
   <run>_boxes.csv   per box: dims (detected vs true), perception error, measured vs true mass,
                     planner, planning time, placement error (position/yaw vs commanded),
                     cycle time, outcome
-  <run>_pallets.csv per pallet: boxes, volume fill %, max height, collapses, rejects,
-                    duration, picks/min, mean planning time
-Collapse detector: every placed box's ground-truth pose is recorded `settle_time` after it
-is reported; any later drift > collapse_threshold (20 mm) counts as one collapse.
+  <run>_pallets.csv per pallet: boxes, volume fill %, max height, collapses (ground truth)
+                    vs stack events detected by perception, rejects, duration, picks/min,
+                    mean planning time, measured pallet / SKU, pattern count, end reason
+  <run>_placement_checks.csv  camera-measured placement error vs ground truth per box
+Ground-truth collapse detector (to evaluate perception's): every placed box's ground-truth
+pose is recorded `settle_time` after it is reported; any later drift > collapse_threshold
+(20 mm) counts as one collapse.
 Publishes /metrics/summary (String JSON) after every pallet.
 """
 
@@ -20,7 +25,8 @@ import os
 import time
 
 import numpy as np
-from palletizer_interfaces.msg import BoxSpec, CycleReport, PalletReport
+from palletizer_interfaces.msg import (BoxSpec, CycleReport, PalletReport, PlacementCheck,
+                                       StackEvent)
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, QoSProfile
@@ -41,7 +47,13 @@ PALLET_FIELDS = [
     'run', 'planner', 'seed', 'pallet', 'boxes', 'rejected', 'box_volume_m3', 'fill_percent',
     'max_height_m', 'collapses', 'lost_boxes', 'duration_s', 'picks_per_min', 'mean_planning_time_s',
     'max_planning_time_s', 'mean_cycle_time_s', 'mean_place_err_mm', 'max_place_err_mm',
-    'mean_mass_err_kg', 'end_reason', 'wall_time']
+    'mean_mass_err_kg', 'end_reason', 'wall_time', 'mode', 'pallet_u', 'pallet_v',
+    'usable_height_m', 'sku_L', 'sku_W', 'sku_H', 'boxes_in_pattern', 'layers',
+    'detected_events', 'placement_checks', 'max_cam_vs_gt_mm', 'picks_per_min_steady']
+CHECK_FIELDS = [
+    'run', 'pallet', 'index', 'sim_name', 'detected', 'cam_err_xy_mm', 'cam_err_z_mm',
+    'cam_err_yaw_deg', 'gt_err_xy_mm', 'gt_err_z_mm', 'cam_vs_gt_xy_mm', 'cam_vs_gt_z_mm',
+    'wall_time']
 
 
 def yaw_err(a, b, square):
@@ -59,12 +71,15 @@ class MetricsLogger(Node):
         self.run = self.declare_parameter('run_name', time.strftime('run_%Y%m%d_%H%M%S')).value
         self.planner = self.declare_parameter('planner', '').value
         self.seed = int(self.declare_parameter('seed', -1).value)
+        self.mode = self.declare_parameter('mode', 'mixed').value
         self.settle = float(self.declare_parameter('settle_time', 1.5).value)
         self.collapse_thr = float(self.declare_parameter('collapse_threshold', 0.020).value)
         os.makedirs(self.results_dir, exist_ok=True)
         self.box_csv = os.path.join(self.results_dir, f'{self.run}_boxes.csv')
         self.pallet_csv = os.path.join(self.results_dir, f'{self.run}_pallets.csv')
-        for path, fields in ((self.box_csv, BOX_FIELDS), (self.pallet_csv, PALLET_FIELDS)):
+        self.check_csv = os.path.join(self.results_dir, f'{self.run}_placement_checks.csv')
+        for path, fields in ((self.box_csv, BOX_FIELDS), (self.pallet_csv, PALLET_FIELDS),
+                             (self.check_csv, CHECK_FIELDS)):
             if not os.path.exists(path):
                 with open(path, 'w', newline='') as f:
                     csv.DictWriter(f, fieldnames=fields).writeheader()
@@ -77,14 +92,21 @@ class MetricsLogger(Node):
         self.lost = set()          # boxes that left the belt/pallet (floor), whole run
         self.lost_this_pallet = 0
         self.rows = []             # current pallet box rows
+        self.checks = []           # placement checks of the current pallet
+        self.events = []           # stack events of the current pallet
         from palletizer_tools import cell_config
         self.cell = cell_config.load()
         self.pallets_done = 0
+        self.stamps = {}
         self.create_subscription(
             BoxSpec, '/sim/box_specs', lambda m: self.specs.__setitem__(m.name, m),
             QoSProfile(depth=1000, durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.create_subscription(TFMessage, '/sim/box_poses', self.on_poses, 10)
         self.create_subscription(CycleReport, '/orchestrator/cycle_report', self.on_cycle, 50)
+        self.create_subscription(PlacementCheck, '/pallet_perception/placement_check',
+                                 self.on_check, 50)
+        self.create_subscription(StackEvent, '/pallet_perception/stack_events',
+                                 lambda e: self.events.append(e), 50)
         self.create_subscription(
             PalletReport, '/orchestrator/pallet_report', self.on_pallet,
             QoSProfile(depth=50, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -97,6 +119,9 @@ class MetricsLogger(Node):
 
     def on_cycle(self, r):
         self.pending.append((time.monotonic() + self.settle, r))
+        if r.success:
+            self.stamps.setdefault(r.pallet_index, []).append(
+                r.stamp.sec + r.stamp.nanosec * 1e-9)
 
     # ------------------------------------------------------------------ per box
     def finalize_box(self, r):
@@ -139,6 +164,33 @@ class MetricsLogger(Node):
             csv.DictWriter(f, fieldnames=BOX_FIELDS).writerow(row)
         self.rows.append(row)
 
+    # ------------------------------------------------------------------ camera placement checks
+    def on_check(self, c):
+        """The robot's camera placement error vs the ground-truth placement error."""
+        spec = self.specs.get(c.sim_model_name)
+        row = {k: '' for k in CHECK_FIELDS}
+        row.update({'run': self.run, 'pallet': self.pallets_done, 'index': c.index,
+                    'sim_name': c.sim_model_name, 'detected': int(c.detected),
+                    'wall_time': time.time()})
+        cmd = c.commanded.top_center.position
+        cmd = np.array([cmd.x, cmd.y, cmd.z])
+        if c.detected:
+            row.update({'cam_err_xy_mm': c.err_xy * 1000, 'cam_err_z_mm': c.err_z * 1000,
+                        'cam_err_yaw_deg': math.degrees(c.err_yaw)})
+        if spec is not None and c.sim_model_name in self.poses:
+            pos, quat = self.poses[c.sim_model_name]
+            top = pos + Rotation.from_quat(quat).apply([0, 0, spec.size_z / 2])
+            row.update({'gt_err_xy_mm': 1000 * float(np.linalg.norm(top[:2] - cmd[:2])),
+                        'gt_err_z_mm': 1000 * float(top[2] - cmd[2])})
+            if c.detected:
+                m = c.measured_top.position
+                row.update({
+                    'cam_vs_gt_xy_mm': 1000 * float(np.linalg.norm(top[:2] - [m.x, m.y])),
+                    'cam_vs_gt_z_mm': 1000 * abs(float(top[2] - m.z))})
+        with open(self.check_csv, 'a', newline='') as f:
+            csv.DictWriter(f, fieldnames=CHECK_FIELDS).writerow(row)
+        self.checks.append(row)
+
     # ------------------------------------------------------------------ collapse detector
     def check_collapses(self):
         for name, (p0, _) in self.tracked.items():
@@ -152,14 +204,16 @@ class MetricsLogger(Node):
     def check_lost(self):
         """Box ledger: any box below belt level that is not over the pallet fell off."""
         belt = self.cell['conveyor']['belt_top_z']
-        pal = self.cell['pallet']
-        cx, cy = pal['center_xy']
-        hx, hy = pal['size'][0] / 2 + 0.05, pal['size'][1] / 2 + 0.05
+        st = self.cell['pallet_station']
+        cx, cy = st['center_xy']
+        hx, hy = st['area'][0] / 2 + 0.05, st['area'][1] / 2 + 0.05
         for name, (pos, _) in self.poses.items():
             if name in self.lost:
                 continue
             over_pallet = abs(pos[0] - cx) <= hx and abs(pos[1] - cy) <= hy
-            if pos[2] < belt - 0.15 and not over_pallet:
+            # (boxes leaving with an exchanged pallet slide along the pallet lane)
+            in_lane = abs(pos[1] - cy) <= hy and pos[2] > 0.1
+            if pos[2] < belt - 0.15 and not over_pallet and not in_lane:
                 self.lost.add(name)
                 self.lost_this_pallet += 1
                 self.get_logger().warn(f'LOST BOX: {name} fell off at {pos.round(2).tolist()}')
@@ -188,6 +242,7 @@ class MetricsLogger(Node):
             return [float(x[k]) for x in rs if x[k] != '']
         pt, ct, pe, me = col('planning_time_s'), col('cycle_time_s'), col('place_err_mm'), \
             col('mass_err_kg')
+        agree = [float(x['cam_vs_gt_xy_mm']) for x in self.checks if x['cam_vs_gt_xy_mm'] != '']
         row = {
             'run': self.run, 'planner': self.planner or r.planner, 'seed': self.seed,
             'pallet': r.pallet_index, 'boxes': r.boxes,
@@ -203,7 +258,13 @@ class MetricsLogger(Node):
             'mean_place_err_mm': float(np.mean(pe)) if pe else '',
             'max_place_err_mm': float(np.max(pe)) if pe else '',
             'mean_mass_err_kg': float(np.mean(me)) if me else '',
-            'end_reason': r.end_reason, 'wall_time': time.time()}
+            'end_reason': r.end_reason, 'wall_time': time.time(), 'mode': r.mode or self.mode,
+            'pallet_u': r.pallet_length, 'pallet_v': r.pallet_width,
+            'usable_height_m': r.usable_height, 'sku_L': r.sku_length, 'sku_W': r.sku_width,
+            'sku_H': r.sku_height, 'boxes_in_pattern': r.boxes_in_pattern, 'layers': r.layers,
+            'detected_events': len(self.events), 'placement_checks': len(self.checks),
+            'max_cam_vs_gt_mm': max(agree) if agree else '',
+            'picks_per_min_steady': self.steady_rate(r)}
         with open(self.pallet_csv, 'a', newline='') as f:
             csv.DictWriter(f, fieldnames=PALLET_FIELDS).writerow(row)
         self.pallets_done += 1
@@ -214,6 +275,16 @@ class MetricsLogger(Node):
         self.tracked.clear()
         self.collapsed.clear()
         self.lost_this_pallet = 0
+        self.checks = []
+        self.events = []
+
+    def steady_rate(self, r):
+        """Placements per minute between the first and the last placement of the pallet (sim
+        time, from the cycle reports): excludes the exchange and the first box's arrival."""
+        st = sorted(self.stamps.get(r.pallet_index, []))
+        if len(st) < 2:
+            return ''
+        return 60.0 * (len(st) - 1) / (st[-1] - st[0])
 
 
 def main():

@@ -51,6 +51,10 @@ class PhysicsChecker:
         return body
 
     def stable(self, state: PalletState, candidate: Placement, box: Box):
+        return self.stable_many(state, [candidate], box)
+
+    def stable_many(self, state: PalletState, candidates, box: Box):
+        """Add several boxes (e.g. a whole layer) at once; stable if nothing moves."""
         c = self.client
         pb.resetSimulation(physicsClientId=c)
         pb.setGravity(0, 0, -9.81, physicsClientId=c)
@@ -66,10 +70,12 @@ class PhysicsChecker:
             bodies.append(self._box([p.du / 2, p.dv / 2, p.height / 2],
                                     [u, v, p.z0 + p.height / 2],
                                     b.box.mass if b.box.mass > 0 else self.cfg.default_mass))
-        u, v = candidate.center
-        bodies.append(self._box([candidate.du / 2, candidate.dv / 2, candidate.height / 2],
-                                [u, v, candidate.z0 + candidate.height / 2 + self.cfg.drop_height],
-                                box.mass if box.mass > 0 else self.cfg.default_mass))
+        n_old = len(bodies)
+        for cand in candidates:
+            u, v = cand.center
+            bodies.append(self._box([cand.du / 2, cand.dv / 2, cand.height / 2],
+                                    [u, v, cand.z0 + cand.height / 2 + self.cfg.drop_height],
+                                    box.mass if box.mass > 0 else self.cfg.default_mass))
         start = [pb.getBasePositionAndOrientation(b, physicsClientId=c) for b in bodies]
         for _ in range(int(round(self.cfg.sim_time / self.cfg.timestep))):
             pb.stepSimulation(physicsClientId=c)
@@ -77,7 +83,7 @@ class PhysicsChecker:
         for b, (p0, q0) in zip(bodies, start):
             p1, q1 = pb.getBasePositionAndOrientation(b, physicsClientId=c)
             d = float(np.linalg.norm(np.array(p1) - np.array(p0)))
-            if b == bodies[-1]:
+            if bodies.index(b) >= n_old:
                 d = max(0.0, d - self.cfg.drop_height)     # settling from the drop height
             dq = pb.getDifferenceQuaternion(q0, q1, physicsClientId=c)
             ang = 2.0 * math.degrees(math.acos(min(1.0, abs(dq[3]))))

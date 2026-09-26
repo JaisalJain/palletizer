@@ -25,6 +25,7 @@ setup(
             'conveyor_controller = palletizer_tools.conveyor_controller:main',
             'cloud_relay = palletizer_tools.cloud_relay:main',
             'sim_ops = palletizer_tools.sim_ops:main',
+            'pallet_exchanger = palletizer_tools.pallet_exchanger:main',
         ],
     },
 )

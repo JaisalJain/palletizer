@@ -1,15 +1,22 @@
-"""Offline top-down reachability map over the pallet footprint.
+"""Offline top-down reachability map over the pallet STATION AREA, in world coordinates.
 
-For every grid position (u, v) of a box's top-face center (pallet frame: u along the pallet
-length from its -x edge, v from the robot-side edge into the pallet), every box-top height h
-above the pallet top and tool yaw 0 / 90 deg, a cell is reachable iff:
-  * IK exists (UR10e joint limits) for the pre-place pose (h + pre_place_height) and the
-    place pose (h + release_gap), on one continuous branch along the vertical LIN line, and
+The robot does not know the pallet in advance, so the map covers the whole area where the
+pallet conveyor may deliver one (pallet_station.area): for every grid position (x, y) of a
+box's top-face centre, every box-top height z (world) and tool yaw 0 deg, a cell is
+reachable iff:
+  * IK exists (UR10e joint limits) for the pre-place pose (z + pre_place_height) and the
+    place pose (z + release_gap), on one continuous branch along the vertical LIN line, and
   * both states are collision-free against the static planning scene (MoveIt
-    /check_state_validity; needs move_group + motion_server running).
+    /check_state_validity; needs move_group + motion_server running), with the station
+    floor modelled as a slab up to pallet_station.max_deck_z (the highest deck accepted).
+Tool yaw 90 deg is not computed: v1 showed the maps are identical (with the tool pointing
+down, yaw only moves wrist_3, which has +/-360 deg range).
+
+At run time the packing node intersects this map with the MEASURED pallet (its footprint and
+deck height) to get the per-pallet usable stack height (core/reach.py PalletReach).
 
 Writes palletizer_motion/config/<reachability.file> (source tree, so it is versioned) and
-prints the coverage per height plus the derived usable max stack height.
+prints the coverage per height over the station area.
 
 Usage: ros2 run palletizer_motion build_reachability_map [--out PATH] [--no-collision]
 """
@@ -30,22 +37,19 @@ _KIN = None
 _CELL = None
 
 
-def pallet_axes(cell):
-    pal = cell['pallet']
-    x0 = pal['center_xy'][0] - pal['size'][0] / 2
-    y_edge = pal['center_xy'][1] + pal['size'][1] / 2      # robot-side edge
-    return x0, y_edge, pal['size'][2]
-
-
 def grid(cell):
     r = cell['reachability']
-    pal = cell['pallet']
+    st = cell['pallet_station']
     step, inset = r['grid_step'], r['edge_inset']
-    us = np.round(np.arange(inset, pal['size'][0] - inset + 1e-9, step), 4)
-    vs = np.round(np.arange(inset, pal['size'][1] - inset + 1e-9, step), 4)
-    h0, h1, hs = r['top_heights']
-    hs_ = np.round(np.arange(h0, h1 + 1e-9, hs), 4)
-    return us, vs, hs_
+    (cx, cy), (ax, ay) = st['center_xy'], st['area']
+    # nodes symmetric about the station centre (a pallet delivered there has its box
+    # positions on the nodes, as in v1; the lookup is conservative between nodes)
+    nx = int(np.floor((ax / 2 - inset) / step + 1e-9))
+    ny = int(np.floor((ay / 2 - inset) / step + 1e-9))
+    xs = np.round(cx + step * np.arange(-nx, nx + 1), 4)
+    ys = np.round(cy + step * np.arange(-ny, ny + 1), 4)
+    z0, z1, zs = r['top_z']
+    return xs, ys, np.round(np.arange(z0, z1 + 1e-9, zs), 4)
 
 
 def _init(cell):
@@ -64,22 +68,20 @@ def _seed(xy):
 
 def _column(args):
     """IK along one (u, v, yaw) column for all heights. Returns list of (q_pre, q_place)."""
-    u, v, yaw, hs = args
-    x0, y_edge, ptop = pallet_axes(_CELL)
+    x, y, yaw, zs = args
     m = _CELL['motion']
-    x, y = x0 + u, y_edge - v
     out = []
     seed = _seed((x, y))
-    for h in hs:
-        z_place = ptop + h + m['release_gap']
-        z_pre = ptop + h + m['pre_place_height']
+    for z in zs:
+        z_place = z + m['release_gap']
+        z_pre = z + m['pre_place_height']
         q_pre = _KIN.ik(_KIN.down_pose((x, y, z_pre), yaw), seed)
         if q_pre is None:
             out.append(None)
             continue
         q, ok = q_pre, True
-        for z in np.linspace(z_pre, z_place, 4)[1:]:
-            q_next = _KIN.ik(_KIN.down_pose((x, y, z), yaw), q)
+        for zz in np.linspace(z_pre, z_place, 4)[1:]:
+            q_next = _KIN.ik(_KIN.down_pose((x, y, zz), yaw), q)
             if q_next is None or np.max(np.abs(q_next - q)) > 0.35:
                 ok = False
                 break
@@ -91,7 +93,7 @@ def _column(args):
 
 def build(cell, check_collision=True, workers=None):
     us, vs, hs = grid(cell)
-    yaws = [0.0, math.pi / 2]
+    yaws = [0.0]
     jobs = [(u, v, yaw, hs) for yaw in yaws for v in vs for u in us]
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=workers, initializer=_init, initargs=(cell,)) as ex:
@@ -127,6 +129,11 @@ class _Validity:
         self.rclpy = rclpy
         self.node = Node('reachability_map')
         self.mv = MoveItClient(self.node, cell['motion']['planning_group'], cell['motion']['tcp_link'])
+        from palletizer_motion.moveit_client import box_object, make_pose
+        st = cell['pallet_station']
+        dz = st['max_deck_z']
+        slab = box_object('station_slab', 'world', (st['area'][0], st['area'][1], dz),
+                          make_pose((st['center_xy'][0], st['center_xy'][1], dz / 2)))
         self.ex = SingleThreadedExecutor()
         self.ex.add_node(self.node)
         self.running = True
@@ -134,6 +141,7 @@ class _Validity:
         self.t.start()
         if not self.mv.validity.wait_for_service(timeout_sec=30.0):
             raise RuntimeError('/check_state_validity not available (start move_group)')
+        self.mv.add_objects([slab])
 
     def _spin(self):
         while self.running:
@@ -143,6 +151,7 @@ class _Validity:
         return self.mv.state_valid(q)
 
     def close(self):
+        self.mv.remove_objects(['station_slab'])
         self.running = False
         self.t.join(1.0)
         self.rclpy.try_shutdown()
@@ -152,50 +161,22 @@ def _validity_checker(cell):
     return _Validity(cell)
 
 
-def usable_height(hs, reach, min_coverage):
-    """Usable max stack (box-top) height: starting at the lowest level with full coverage,
-    the highest h such that every level up to h keeps coverage >= min_coverage (a cell counts
-    if any yaw is reachable; yaw only changes wrist_3).
-
-    Low levels directly in front of the pedestal are not fully covered (the folded arm
-    collides with the pedestal): that is a near-field keep-out handled per cell by the
-    map filter, not a height limit, so the scan starts at the first fully covered level."""
-    any_yaw = reach.any(axis=0)
-    cov = any_yaw.reshape(len(hs), -1).mean(axis=1)
-    full = [i for i, c in enumerate(cov) if c + 1e-9 >= min_coverage]
-    if not full:
-        return 0.0, cov
-    usable = float(hs[full[0]])
-    for i in range(full[0], len(hs)):
-        if cov[i] + 1e-9 < min_coverage:
-            break
-        usable = float(hs[i])
-    return usable, cov
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--out', default=None)
     ap.add_argument('--no-collision', action='store_true')
     ap.add_argument('--workers', type=int, default=None)
     args = ap.parse_args(argv)
-    cell = cell_config.load()
+    cell = cell_config.load(role='robot')
     out = args.out or os.path.join(os.path.expanduser('~/palletizer_ws/src/palletizer_motion/config'),
                                    cell['reachability']['file'])
-    us, vs, hs, yaws, reach = build(cell, not args.no_collision, args.workers)
-    usable, cov = usable_height(hs, reach, cell['reachability']['min_coverage'])
-    np.savez_compressed(out, u=us, v=vs, h=hs, yaw=yaws, reach=reach, usable_top_height=usable,
-                        coverage=cov, pallet_top=pallet_axes(cell)[2],
+    xs, ys, zs, yaws, reach = build(cell, not args.no_collision, args.workers)
+    np.savez_compressed(out, x=xs, y=ys, z=zs, yaw=yaws, reach=reach,
                         collision_checked=not args.no_collision)
     print(f'saved {out}')
-    same = np.array_equal(reach[0], reach[1])
-    print(f'yaw 0 and 90 deg maps identical: {same} '
-          f'(differences: {int((reach[0] != reach[1]).sum())} cells)')
-    print('box-top height [m] : coverage (any yaw) | yaw0 | yaw90')
-    for i, h in enumerate(hs):
-        print(f'  {h:5.2f} : {cov[i] * 100:6.1f}% | {reach[0, i].mean() * 100:6.1f}% | '
-              f'{reach[1, i].mean() * 100:6.1f}%')
-    print(f'usable max stack (box-top) height: {usable:.2f} m above the pallet top')
+    print('box-top z [m] (world) : coverage over the station area')
+    for i, z in enumerate(zs):
+        print(f'  {z:5.2f} : {reach[:, i].any(axis=0).mean() * 100:6.1f}%')
     return 0
 
 

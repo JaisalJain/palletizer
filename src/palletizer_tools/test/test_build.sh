@@ -23,7 +23,8 @@ warnings=$(grep -iE "warning" "$OUT/build.txt" | grep -v "^--" || true)
 [[ -z $warnings ]]; check $? "no warnings in build output"
 [[ -n $warnings ]] && echo "$warnings" | head -20
 
-for lib in libpalletizer_suction_gripper.so libpalletizer_model_pose_publisher.so; do
+for lib in libpalletizer_suction_gripper.so libpalletizer_model_pose_publisher.so \
+           libpalletizer_pallet_mover.so; do
   path="$OUT/install/palletizer_gazebo/lib/$lib"
   gzsim=$(LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-} ldd "$path" 2>/dev/null | grep "libgz-sim8" | awk '{print $3}')
   [[ $gzsim == /opt/ros/jazzy/opt/gz_sim_vendor/* ]]; check $? "$lib links $gzsim"

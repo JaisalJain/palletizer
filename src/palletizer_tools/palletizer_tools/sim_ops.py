@@ -4,7 +4,7 @@ These model physical equipment/operators that exist around a real cell:
   /sim/reject_pick_zone_box (Trigger)  reject pusher: removes the box resting in the pick zone
   /sim/reject_held_box (Trigger)       operator removes the box hanging on the gripper
                                        (after suction off) - used only as a last recovery
-  /sim/clear_pallet (Trigger)          forklift pallet swap: removes every box on the pallet
+(Pallet exchange: palletizer_tools/pallet_exchanger.)
 
 Because they act on the simulated world, they may use ground truth (/sim/box_poses) to find
 which models to delete. Nothing here feeds perception, planning or control.
@@ -39,7 +39,6 @@ class SimOps(Node):
         cb = MutuallyExclusiveCallbackGroup()
         self.create_service(Trigger, '/sim/reject_pick_zone_box', self.on_reject_pick, callback_group=cb)
         self.create_service(Trigger, '/sim/reject_held_box', self.on_reject_held, callback_group=cb)
-        self.create_service(Trigger, '/sim/clear_pallet', self.on_clear_pallet, callback_group=cb)
         self.get_logger().info('sim_ops ready')
 
     def on_poses(self, msg):
@@ -79,17 +78,6 @@ class SimOps(Node):
             return response
         response.success = self.delete(name)
         response.message = name
-        return response
-
-    def on_clear_pallet(self, request, response):
-        pal = self.cell['pallet']
-        cx, cy = pal['center_xy']
-        hx, hy = pal['size'][0] / 2 + 0.3, pal['size'][1] / 2 + 0.3
-        names = [n for n, (xyz, _) in self.poses.items()
-                 if abs(xyz[0] - cx) <= hx and abs(xyz[1] - cy) <= hy and n != self.attached]
-        ok = all(self.delete(n) for n in names)
-        response.success = ok
-        response.message = f'removed {len(names)} boxes'
         return response
 
 

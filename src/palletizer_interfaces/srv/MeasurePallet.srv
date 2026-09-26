@@ -1,0 +1,6 @@
+# Measure the (empty) pallet at the station; resets pallet_perception's stack model.
+float64 timeout           # [s], 0 = default
+---
+bool success
+string message
+DetectedPallet pallet

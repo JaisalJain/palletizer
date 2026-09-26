@@ -1,7 +1,11 @@
 """Pallet model: 1 cm height map plus a record of placed boxes. No ROS imports.
 
-Pallet frame: u along the pallet length (0..L, world +x), v from the robot-side edge into the
-pallet (0..W, world -y), z above the pallet top surface. Grid arrays are indexed [iv, iu].
+Pallet frame (from the MEASURED pallet): u along the deck side facing the robot (0..L), v from
+the robot-side edge into the pallet (0..W), z above the deck top. Grid arrays are [iv, iu].
+A footprint covers a cell if it overlaps it by more than `cell_tol` (3 mm): two boxes placed
+with a >= 4 mm gap never claim the same 1 cm cell. Because that would also hide real overlaps
+below 2 x cell_tol, the resting height additionally checks the exact footprints of the
+placement record.
 """
 
 from dataclasses import dataclass, field
@@ -55,22 +59,25 @@ class PlacedBox:
 
 @dataclass
 class PalletSpec:
-    length: float = 1.2
-    width: float = 0.8
+    length: float = 1.2              # measured deck extent along u
+    width: float = 0.8               # measured deck extent along v
     resolution: float = 0.01
-    max_height: float = 1.05         # max box-top height above the pallet top
+    max_height: float = 1.05         # max box-top height above the deck
+    cell_tol: float = 0.003          # min footprint overlap for a cell to count
 
     @property
     def shape(self):
         return (int(round(self.width / self.resolution)), int(round(self.length / self.resolution)))
 
     @classmethod
-    def from_config(cls, cell, usable_height=None):
-        pal, pk = cell['pallet'], cell['packing']
-        max_h = pal['max_stack_height']
+    def measured(cls, size_u, size_v, cell, usable_height=None):
+        """Spec for a measured deck: limits from the config, usable height from the
+        reachability map for this pallet."""
+        pk = cell['packing']
+        max_h = cell['pallet_station']['max_stack_height']
         if usable_height is not None:
             max_h = min(max_h, usable_height)
-        return cls(pal['size'][0], pal['size'][1], pk['resolution'], max_h)
+        return cls(size_u, size_v, pk['resolution'], max_h, pk.get('cell_overlap_tol', 0.003))
 
 
 class PalletState:
@@ -83,25 +90,45 @@ class PalletState:
 
     def copy(self):
         s = PalletState(self.spec)
+        s._rect_cache = None
         s.height = self.height.copy()
         s.owner = self.owner.copy()
         s.boxes = list(self.boxes)
         return s
 
+    def with_height(self, height):
+        """Copy with another height map (e.g. merged with perception), same record."""
+        s = self.copy()
+        s.height = height.copy()
+        return s
+
     # ------------------------------------------------------------------ grid helpers
     def cells(self, u0, v0, du, dv):
         """Index ranges of the cells covered by a footprint (any overlap counts)."""
-        r = self.spec.resolution
-        iu0 = max(0, int(math.floor(u0 / r + 1e-6)))
-        iu1 = min(self.height.shape[1], int(math.ceil((u0 + du) / r - 1e-6)))
-        iv0 = max(0, int(math.floor(v0 / r + 1e-6)))
-        iv1 = min(self.height.shape[0], int(math.ceil((v0 + dv) / r - 1e-6)))
+        r, t = self.spec.resolution, self.spec.cell_tol
+        iu0 = max(0, int(math.floor((u0 + t) / r + 1e-6)))
+        iu1 = min(self.height.shape[1], int(math.ceil((u0 + du - t) / r - 1e-6)))
+        iv0 = max(0, int(math.floor((v0 + t) / r + 1e-6)))
+        iv1 = min(self.height.shape[0], int(math.ceil((v0 + dv - t) / r - 1e-6)))
         return slice(iv0, iv1), slice(iu0, iu1)
 
     def rest_height(self, u0, v0, du, dv):
         sv, su = self.cells(u0, v0, du, dv)
         region = self.height[sv, su]
-        return float(region.max()) if region.size else 0.0
+        h = float(region.max()) if region.size else 0.0
+        if self.boxes:
+            R = self._rects()
+            ov = ((np.minimum(R[:, 0] + R[:, 2], u0 + du) - np.maximum(R[:, 0], u0) > 1e-4) &
+                  (np.minimum(R[:, 1] + R[:, 3], v0 + dv) - np.maximum(R[:, 1], v0) > 1e-4))
+            if ov.any():
+                h = max(h, float(R[ov, 4].max()))
+        return h
+
+    def _rects(self):
+        if getattr(self, '_rect_cache', None) is None or len(self._rect_cache) != len(self.boxes):
+            self._rect_cache = np.array([[b.placement.u0, b.placement.v0, b.placement.du,
+                                          b.placement.dv, b.placement.top] for b in self.boxes])
+        return self._rect_cache
 
     # ------------------------------------------------------------------ updates
     def place(self, placement: Placement, box: Box, name=''):

@@ -1,0 +1,10 @@
+# Measure a placement with the pallet camera (waits for an unoccluded view).
+Placement placement
+DetectedBox box
+uint32 index              # placement number on this pallet
+string sim_model_name     # SIM ONLY, passed through for evaluation
+float64 timeout           # [s], 0 = default
+---
+bool success
+string message
+PlacementCheck check

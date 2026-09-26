@@ -23,6 +23,8 @@ setup(
         'console_scripts': [
             'box_perception = palletizer_perception.box_perception:main',
             'eval_perception = palletizer_perception.eval_perception:main',
+            'pallet_perception = palletizer_perception.pallet_perception:main',
+            'eval_pallet_perception = palletizer_perception.eval_pallet_perception:main',
         ],
     },
 )

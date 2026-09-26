@@ -10,7 +10,6 @@
   <xacro:arg name="real_time_factor" default="1.0"/>
   <xacro:property name="cell" value="${xacro.load_yaml('$(arg cell_config)')}"/>
   <xacro:property name="cv" value="${cell['conveyor']}"/>
-  <xacro:property name="pal" value="${cell['pallet']}"/>
   <xacro:property name="cam" value="${cell['camera']}"/>
 
   <xacro:macro name="box_inertia" params="m x y z">
@@ -60,6 +59,18 @@
       <topic>/sim/model_poses</topic>
       <frame_id>world</frame_id>
       <update_rate>30</update_rate>
+    </plugin>
+    <!-- Ground-truth pallet poses (EVALUATION ONLY) -->
+    <plugin filename="palletizer_model_pose_publisher" name="palletizer_gazebo::ModelPosePublisher">
+      <model_prefix>pallet_</model_prefix>
+      <topic>/sim/pallet_model_poses</topic>
+      <frame_id>world</frame_id>
+      <update_rate>30</update_rate>
+    </plugin>
+    <!-- Kinematic pallet conveyor (driven by pallet_exchanger; only during exchanges) -->
+    <plugin filename="palletizer_pallet_mover" name="palletizer_gazebo::PalletMover">
+      <cmd_topic>/sim/pallet_mover/cmd</cmd_topic>
+      <state_topic>/sim/pallet_mover/state</state_topic>
     </plugin>
 
     <scene>
@@ -220,38 +231,77 @@
       <xacro:eyes zones="${cv['zones']}"/>
     </model>
 
-    <!-- ============================ EUR pallet ============================ -->
-    <xacro:property name="px" value="${pal['size'][0]}"/>
-    <xacro:property name="py" value="${pal['size'][1]}"/>
-    <xacro:property name="pz" value="${pal['size'][2]}"/>
-    <xacro:property name="wood" value="${[0.72, 0.56, 0.36, 1]}"/>
-    <model name="pallet">
+    <!-- ========== Pallet station + lane (pallets are spawned / moved by pallet_exchanger) ==========
+         Floor markings only: the lane the pallet conveyor moves pallets along (+x) and the
+         station AREA. No pallet in the world file: the robot measures whatever arrives. -->
+    <xacro:property name="st" value="${cell['pallet_station']}"/>
+    <xacro:property name="ex" value="${cell['exchanger']}"/>
+    <xacro:property name="lane_len" value="${ex['exit_x'] - ex['entry_x'] + 1.4}"/>
+    <model name="station_markings">
       <static>true</static>
-      <pose>${pal['center_xy'][0]} ${pal['center_xy'][1]} 0 0 0 0</pose>
-      <link name="link">
-        <collision name="collision">
-          <pose>0 0 ${pz / 2} 0 0 0</pose>
-          <geometry><box><size>${px} ${py} ${pz}</size></box></geometry>
-          <surface><friction><ode><mu>0.6</mu><mu2>0.6</mu2></ode></friction></surface>
-        </collision>
-        <!-- top deck: 5 boards along x -->
-        <xacro:macro name="deck_board" params="i">
-          <xacro:vbox name="deck_${i}" x="0" y="${-py / 2 + 0.05 + i * (py - 0.1) / 4}" z="${pz - 0.011}"
-                      sx="${px}" sy="0.1" sz="0.022" rgba="${wood}"/>
-        </xacro:macro>
-        <xacro:deck_board i="0"/><xacro:deck_board i="1"/><xacro:deck_board i="2"/>
-        <xacro:deck_board i="3"/><xacro:deck_board i="4"/>
-        <!-- stringer boards + blocks -->
-        <xacro:macro name="block_row" params="j">
-          <xacro:property name="yy" value="${-py / 2 + 0.05 + j * (py - 0.1) / 2}"/>
-          <xacro:vbox name="stringer_${j}" x="0" y="${yy}" z="${pz - 0.022 - 0.011}" sx="${px}" sy="0.1" sz="0.022" rgba="${wood}"/>
-          <xacro:vbox name="block_${j}_0" x="${-px / 2 + 0.05}" y="${yy}" z="${0.022 + 0.039}" sx="0.1" sy="0.1" sz="0.078" rgba="${wood}"/>
-          <xacro:vbox name="block_${j}_1" x="0" y="${yy}" z="${0.022 + 0.039}" sx="0.14" sy="0.1" sz="0.078" rgba="${wood}"/>
-          <xacro:vbox name="block_${j}_2" x="${px / 2 - 0.05}" y="${yy}" z="${0.022 + 0.039}" sx="0.1" sy="0.1" sz="0.078" rgba="${wood}"/>
-          <xacro:vbox name="bottom_${j}" x="0" y="${yy}" z="0.011" sx="${px}" sy="0.1" sz="0.022" rgba="${wood}"/>
-        </xacro:macro>
-        <xacro:block_row j="0"/><xacro:block_row j="1"/><xacro:block_row j="2"/>
+      <link name="markings">
+        <xacro:vbox name="lane_l" x="${(ex['entry_x'] + ex['exit_x']) / 2}" y="${ex['lane_y'] + st['area'][1] / 2 + 0.03}" z="0.001"
+                    sx="${lane_len}" sy="0.05" sz="0.002" rgba="${[0.95, 0.8, 0.1, 1]}"/>
+        <xacro:vbox name="lane_r" x="${(ex['entry_x'] + ex['exit_x']) / 2}" y="${ex['lane_y'] - st['area'][1] / 2 - 0.03}" z="0.001"
+                    sx="${lane_len}" sy="0.05" sz="0.002" rgba="${[0.95, 0.8, 0.1, 1]}"/>
+        <xacro:vbox name="station_in" x="${st['center_xy'][0] - st['area'][0] / 2}" y="${st['center_xy'][1]}" z="0.0015"
+                    sx="0.03" sy="${st['area'][1]}" sz="0.003" rgba="${[0.9, 0.9, 0.9, 1]}"/>
+        <xacro:vbox name="station_out" x="${st['center_xy'][0] + st['area'][0] / 2}" y="${st['center_xy'][1]}" z="0.0015"
+                    sx="0.03" sy="${st['area'][1]}" sz="0.003" rgba="${[0.9, 0.9, 0.9, 1]}"/>
       </link>
+    </model>
+
+    <!-- ===================== Pallet camera: overhead RGB-D above the station ===================== -->
+    <xacro:property name="pc" value="${cell['pallet_camera']}"/>
+    <xacro:property name="pmast_h" value="${pc['mast_size'][2]}"/>
+    <model name="station_camera_mast">
+      <static>true</static>
+      <link name="mast">
+        <pose>${pc['mast_xy'][0]} ${pc['mast_xy'][1]} 0 0 0 0</pose>
+        <collision name="post_collision">
+          <pose>0 0 ${pmast_h / 2} 0 0 0</pose>
+          <geometry><box><size>${pc['mast_size'][0]} ${pc['mast_size'][1]} ${pmast_h}</size></box></geometry>
+        </collision>
+        <xacro:vbox name="post" x="0" y="0" z="${pmast_h / 2}" sx="${pc['mast_size'][0]}" sy="${pc['mast_size'][1]}" sz="${pmast_h}" rgba="${[0.2, 0.22, 0.25, 1]}"/>
+        <xacro:vbox name="foot" x="0" y="0" z="0.01" sx="0.4" sy="0.4" sz="0.02" rgba="${[0.2, 0.22, 0.25, 1]}"/>
+        <xacro:vbox name="arm" x="0" y="${(pc['xyz'][1] - pc['mast_xy'][1]) / 2}" z="${pc['xyz'][2] + 0.06}"
+                    sx="0.06" sy="${max(pc['mast_xy'][1] - pc['xyz'][1], pc['xyz'][1] - pc['mast_xy'][1]) + 0.1}" sz="0.06" rgba="${[0.2, 0.22, 0.25, 1]}"/>
+      </link>
+      <link name="pallet_camera_link">
+        <pose>${pc['xyz'][0]} ${pc['xyz'][1]} ${pc['xyz'][2]} ${pc['rpy'][0]} ${pc['rpy'][1]} ${pc['rpy'][2]}</pose>
+        <visual name="housing">
+          <pose>-0.02 0 0 0 0 0</pose>
+          <geometry><box><size>0.04 0.12 0.04</size></box></geometry>
+          <xacro:material rgba="${[0.1, 0.1, 0.1, 1]}"/>
+        </visual>
+        <sensor name="pallet_rgbd" type="rgbd_camera">
+          <always_on>true</always_on>
+          <update_rate>${pc['rate']}</update_rate>
+          <topic>pallet_camera</topic>
+          <gz_frame_id>pallet_camera_optical_frame</gz_frame_id>
+          <camera>
+            <horizontal_fov>${pc['hfov']}</horizontal_fov>
+            <image>
+              <width>${pc['width']}</width>
+              <height>${pc['height']}</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip><near>${pc['near']}</near><far>${pc['far']}</far></clip>
+            <noise>
+              <type>gaussian</type>
+              <mean>0.0</mean>
+              <stddev>${pc['depth_noise_stddev']}</stddev>
+            </noise>
+            <depth_camera>
+              <clip><near>${pc['near']}</near><far>${pc['far']}</far></clip>
+            </depth_camera>
+          </camera>
+        </sensor>
+      </link>
+      <joint name="camera_mount" type="fixed">
+        <parent>mast</parent>
+        <child>pallet_camera_link</child>
+      </joint>
     </model>
 
     <!-- ===================== Camera mast + overhead RGB-D ===================== -->

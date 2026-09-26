@@ -6,3 +6,4 @@ string sim_model_name     # SIM ONLY, lets the collapse detector / pallet swap i
 ---
 bool success
 string message
+PackingState state        # packing_node only

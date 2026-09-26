@@ -1,11 +1,12 @@
 """Pick and place with MoveIt 2 (Pilz PTP/LIN), exposed as ROS 2 actions.
 
 Actions:  /motion/pick  (PickBox)   pre-grasp -> LIN descend -> suction on + confirm -> attach
-                                     -> LIN lift to transit height -> weigh (F/T)
+                                     -> LIN out + PTP up to transit height -> weigh (F/T)
           /motion/place (PlaceBox)  pre-place -> LIN descend -> release ~5 mm above the
                                      resting surface + confirm -> detach -> LIN retreat
 Services: /suction/weigh (Weigh), /motion/park (Trigger),
-          /motion/scene/add_placed (CommitPlacement), /motion/scene/clear_placed (Trigger)
+          /motion/scene/add_placed (CommitPlacement), /motion/scene/clear_placed (Trigger),
+          /motion/scene/set_pallet (SetPallet): the MEASURED pallet as a collision object
 
 Inputs are perception results and planner placements only; the suction plugin's
 attached_model name is passed through for evaluation and never used for control.
@@ -19,7 +20,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import WrenchStamped
 from palletizer_interfaces.action import PickBox, PlaceBox
-from palletizer_interfaces.srv import CommitPlacement, Weigh
+from palletizer_interfaces.srv import CommitPlacement, SetPallet, Weigh
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -47,7 +48,7 @@ class MotionServer(Node):
     def __init__(self):
         super().__init__('motion_server')
         cfg_path = self.declare_parameter('cell_config', '').value
-        self.cell = cell_config.load(cfg_path or None)
+        self.cell = cell_config.load(cfg_path or None, role='robot')
         self.m = self.cell['motion']
         self.kin = UrKinematics(self.cell)
         self.cb = ReentrantCallbackGroup()
@@ -63,7 +64,9 @@ class MotionServer(Node):
         self.busy = threading.Lock()
         self.held = None            # dict with grasp info while carrying a box
         self.placed_ids = []
-        self.stack_top = self.cell['pallet']['size'][2]   # tallest placed box top (world z)
+        self.deck_z = 0.0           # measured deck of the pallet at the station (0: none)
+        self.stack_top = 0.0        # tallest placed box top (world z)
+        self.station_xy = tuple(self.cell['pallet_station']['center_xy'])
 
         self.create_subscription(JointState, '/joint_states', self.on_js, 10, callback_group=self.cb)
         self.create_subscription(Bool, '/suction/grasped', self.on_grasped, 10, callback_group=self.cb)
@@ -81,6 +84,8 @@ class MotionServer(Node):
         self.create_service(CommitPlacement, '/motion/scene/add_placed', self.on_add_placed,
                             callback_group=self.cb)
         self.create_service(Trigger, '/motion/scene/clear_placed', self.on_clear_placed,
+                            callback_group=self.cb)
+        self.create_service(SetPallet, '/motion/scene/set_pallet', self.on_set_pallet,
                             callback_group=self.cb)
         self.pick_server = ActionServer(
             self, PickBox, '/motion/pick', self.execute_pick, callback_group=self.cb,
@@ -160,7 +165,15 @@ class MotionServer(Node):
     def lin(self, xyz, yaw, slow=False):
         v = self.m['lin_slow_velocity_scaling'] if slow else self.m['lin_velocity_scaling']
         a = self.m['lin_acceleration_scaling']
-        return self.mv.move_lin(xyz, tool_quat(yaw), v, a, self.m['planning_time'])
+        ok, msg = self.mv.move_lin(xyz, tool_quat(yaw), v, a, self.m['planning_time'])
+        fb_v, fb_a = self.m['lin_fallback_scaling']
+        if not ok and 'error code -1' in msg and (v > fb_v or a > fb_a):
+            # Pilz rejects a Cartesian path whose IK exceeds a joint limit (fast LIN near a
+            # wrist configuration change): plan the same line slower
+            self.get_logger().info(f'LIN at {v:.2f}/{a:.2f} failed ({msg}), retrying slower')
+            ok, msg = self.mv.move_lin(xyz, tool_quat(yaw), min(v, fb_v), min(a, fb_a),
+                                       self.m['planning_time'])
+        return ok, msg
 
     def descend(self, xyz, yaw):
         """LIN to slow_zone above xyz, then slow LIN to xyz."""
@@ -259,9 +272,8 @@ class MotionServer(Node):
         """Out of the camera view: hub on the pallet side, then the park pose."""
         T = self.kin.fk(self.joints)
         yaw = math.atan2(T[1, 0], T[0, 0])           # tool x axis (TCP points down)
-        _, msg = self.go_hub(self.cell['pallet']['center_xy'],
-                             max(self.hub_z(0.0), T[2, 3]), yaw)
-        ok, msg2 = self.ptp(self.route_pan(np.array(self.cell['robot']['home'], dtype=float)))
+        _, msg = self.go_hub(self.station_xy, max(self.hub_z(0.0), T[2, 3]), yaw)
+        ok, msg2 = self.ptp(self.route_pan(np.array(self.cell['robot']['park'], dtype=float)))
         return ok, f'{msg}; {msg2}'
 
     def feedback(self, goal_handle, fb_type, phase, progress):
@@ -305,14 +317,15 @@ class MotionServer(Node):
         self.mv.add_objects([box_object(
             'target_box', 'world', (box.length, box.width, box.height),
             make_pose(top - [0, 0, box.height / 2], tq))])
-        self.feedback(gh, PickBox, 'transit', 0.08)
-        ok, msg = self.go_hub(pre[:2], max(self.hub_z(0.0), pre[2]), yaw)
-        if not ok:
-            self.mv.remove_objects(['target_box'])
-            self.go_park()
-            return self._fail(res, 'PLAN_FAILED', f'hub: {msg}')
+        # Straight to the pre-grasp pose (canonical swing via +x, collision-checked by Pilz /
+        # MoveIt); via the transit hub at the pick bearing if that is not possible.
         self.feedback(gh, PickBox, 'move to pre-grasp', 0.1)
         ok, msg = self.ptp(self.route_pan(q_pre))
+        if not ok:
+            self.feedback(gh, PickBox, 'transit via hub', 0.12)
+            ok, msg = self.go_hub(pre[:2], max(self.hub_z(0.0), pre[2]), yaw)
+            if ok:
+                ok, msg = self.ptp(self.route_pan(q_pre))
         if not ok:
             self.mv.remove_objects(['target_box'])
             self.go_park()
@@ -362,7 +375,10 @@ class MotionServer(Node):
         # Cartesian near-singularity of a long vertical LIN with the arm stretched up).
         ok, msg = self.lin(pre, yaw)
         if ok:
-            lift = np.array([pre[0], pre[1], max(pre[2], self.lift_z(box.height))])
+            # up to transit height: clears the conveyor frame / end stop and every stack, so
+            # the place can swing straight to above its target (no second hub)
+            lift = np.array([pre[0], pre[1], max(pre[2], self.lift_z(box.height),
+                                                 self.hub_z(box.height))])
             q_lift, _ = self.solve(lift, [yaw], ref=self.joints, seed=self.joints)
             if q_lift is None:
                 ok, msg = False, f'no IK for lift {lift.round(3)}'
@@ -381,10 +397,6 @@ class MotionServer(Node):
         time.sleep(m['weigh_settle'])
         fz = self.mean_fz(m['weigh_window'])
         res.measured_mass = (fz - tare) / G if fz is not None and tare is not None else 0.0
-        self.feedback(gh, PickBox, 'clear the conveyor', 0.95)
-        ok, msg = self.go_hub(self.cell['pallet']['center_xy'], self.hub_z(box.height), yaw)
-        if not ok:
-            return self._fail(res, 'EXEC_FAILED', f'hub after pick: {msg}')
         res.sim_model_name = self.attached_name
         res.success = True
         res.message = f'picked, {res.measured_mass:.2f} kg'
@@ -493,12 +505,9 @@ class MotionServer(Node):
         ok, msg = self.ptp(self.route_pan(q_above))
         if not ok:
             return self._fail(res, 'PLAN_FAILED', f'above target: {msg}')
-        if above[2] > pre_tcp[2] + 1e-3:
-            self.feedback(gh, PlaceBox, 'down to pre-place', 0.3)
-            ok, msg = self.lin(pre_tcp, yaw)
-            if not ok:
-                return self._fail(res, 'EXEC_FAILED', f'down to pre-place: {msg}')
-        self.feedback(gh, PlaceBox, 'descend', 0.4)
+        # one vertical line from above the target to the slow zone (through pre-place), then
+        # the slow final centimetres
+        self.feedback(gh, PlaceBox, 'descend', 0.3)
         ok, msg = self.descend(release_tcp, yaw)
         if not ok:
             self.lin(pre_tcp, yaw)
@@ -555,9 +564,28 @@ class MotionServer(Node):
         ok = self.mv.remove_objects(self.placed_ids) if self.placed_ids else True
         n = len(self.placed_ids)
         self.placed_ids = []
-        self.stack_top = self.cell['pallet']['size'][2]
-        self.stack_top = self.cell['pallet']['size'][2]   # tallest placed box top (world z)
+        self.stack_top = self.deck_z
         response.success, response.message = ok, f'removed {n} boxes from the planning scene'
+        return response
+
+    def on_set_pallet(self, request, response):
+        """Collision object for the measured pallet (or remove it: valid = false)."""
+        p = request.pallet
+        if not p.valid:
+            ok = self.mv.remove_objects(['pallet'])
+            self.deck_z = 0.0
+            self.stack_top = 0.0
+            response.success, response.message = True, 'pallet removed from the planning scene'
+            return response
+        q = Rotation.from_euler('z', p.yaw).as_quat()
+        ok = self.mv.add_objects([box_object(
+            'pallet', 'world', (p.size_u, p.size_v, p.deck_z),
+            make_pose((p.center.position.x, p.center.position.y, p.deck_z / 2), q))])
+        self.deck_z = p.deck_z
+        self.stack_top = max(self.stack_top, p.deck_z)
+        response.success = ok
+        response.message = (f'pallet {p.size_u:.3f} x {p.size_v:.3f} m (deck {p.deck_z:.3f} m) '
+                            f'in the planning scene')
         return response
 
 

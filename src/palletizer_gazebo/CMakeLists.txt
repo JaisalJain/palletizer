@@ -29,7 +29,13 @@ target_link_libraries(palletizer_model_pose_publisher
   gz-plugin::register
   gz-transport::gz-transport)
 
-install(TARGETS palletizer_suction_gripper palletizer_model_pose_publisher
+add_library(palletizer_pallet_mover SHARED src/PalletMover.cc)
+target_link_libraries(palletizer_pallet_mover
+  gz-sim::gz-sim
+  gz-plugin::register
+  gz-transport::gz-transport)
+
+install(TARGETS palletizer_suction_gripper palletizer_model_pose_publisher palletizer_pallet_mover
   LIBRARY DESTINATION lib)
 install(DIRECTORY config launch rviz worlds DESTINATION share/${PROJECT_NAME})
 

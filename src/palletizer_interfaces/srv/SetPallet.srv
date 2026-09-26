@@ -1,0 +1,6 @@
+# Tell packing / the motion planning scene which pallet is at the station (valid=false: none).
+DetectedPallet pallet
+---
+bool success
+string message
+PackingState state

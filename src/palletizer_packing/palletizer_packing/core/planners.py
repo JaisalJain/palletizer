@@ -77,6 +77,19 @@ class Planner:
         self.validator = None
         self.validator_max = 12
         self._vcalls = 0
+        self.last_reason = ''       # why the last plan failed (PalletStatus reasons)
+        self._reasons = {}
+
+    def _count(self, reason):
+        self._reasons[reason] = self._reasons.get(reason, 0) + 1
+
+    def failure_reason(self):
+        """HEIGHT_LIMIT when most in-bounds candidates were too high, else
+        NO_FEASIBLE_PLACEMENT."""
+        r = {k: v for k, v in self._reasons.items() if k != 'out of bounds'}
+        n = sum(r.values())
+        return 'HEIGHT_LIMIT' if n and r.get('too high', 0) >= 0.5 * n else \
+            'NO_FEASIBLE_PLACEMENT'
 
     def motion_ok(self, p):
         if self.validator is None:
@@ -96,14 +109,17 @@ class Planner:
     def feasible_candidates(self, state, box):
         out = []
         n = 0
+        self._reasons = {}
         for u, v, du, dv, rot in candidates(state, box, self.cfg.step, self.cfg.gap):
             n += 1
             p = make_placement(state, box, u, v, du, dv, rot)
             if self.excluded(p):
                 continue
-            ok, _ = feasible(state, p, box, self.rules, self.reach)
+            ok, why = feasible(state, p, box, self.rules, self.reach)
             if ok:
                 out.append(p)
+            else:
+                self._count(why if why in ('too high', 'out of bounds') else 'other')
         return out, n
 
 
@@ -118,12 +134,16 @@ class NaivePlanner(Planner):
         cands = candidates(state, box, self.cfg.step, self.cfg.gap)
         cands.sort(key=lambda c: (-round(c[1] + c[3], 4), round(c[0], 4), c[4]))
         n = 0
+        self._reasons = {}
+        self.last_reason = ''
         for u, v, du, dv, rot in cands:
             n += 1
             p = make_placement(state, box, u, v, du, dv, rot)
             if self.excluded(p):
                 continue
-            ok, _ = feasible(state, p, box, self.rules, self.reach)
+            ok, why = feasible(state, p, box, self.rules, self.reach)
+            if not ok:
+                self._count(why if why in ('too high', 'out of bounds') else 'other')
             if ok and not self.motion_ok(p):
                 if self._vcalls >= self.validator_max:
                     break
@@ -137,6 +157,7 @@ class NaivePlanner(Planner):
         self.last_stats = {'candidates_checked': n, 'physics_checks': 0,
                            'motion_checks': self._vcalls,
                            'planning_time': time.perf_counter() - t0}
+        self.last_reason = self.failure_reason()
         return None
 
 
@@ -253,6 +274,7 @@ class HeuristicPlanner(Planner):
         stats = {'candidates_checked': n, 'feasible': len(feas), 'physics_checks': checks,
                  'motion_checks': self._vcalls, 'planning_time': time.perf_counter() - t0}
         self.last_stats = stats
+        self.last_reason = '' if chosen is not None else self.failure_reason()
         if chosen is not None:
             chosen.info = stats
         return chosen

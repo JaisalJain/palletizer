@@ -151,16 +151,30 @@ def test_reachability_map_lookup():
     assert not m.reachable(0.1, 0.1, 0.45)             # above the map
 
 
+def eur_at_station(cell):
+    """Test fixture only: an EUR pallet as delivered to the station centre (the robot
+    measures it; see palletizer_perception)."""
+    from palletizer_tools.pallet_frame import PalletFrame
+    cx, cy = cell['pallet_station']['center_xy']
+    return PalletFrame(np.array([cx - 0.6, cy + 0.4]), 0.0, 1.2, 0.8, 0.144)
+
+
 def test_real_reachability_map(cell):
+    """The world-frame station map seen from an EUR pallet at the station reproduces the v1
+    result: usable stack height 1.05 m, far top corners and the pedestal keep-out."""
+    from palletizer_packing.core.reach import PalletReach
     path = os.path.join(HERE, '..', '..', 'palletizer_motion', 'config',
                         cell['reachability']['file'])
     if not os.path.exists(path):
         pytest.skip('reachability map not built')
     m = ReachabilityMap.load(path)
-    assert m.usable_top_height == pytest.approx(1.05)
-    assert m.reachable(0.6, 0.4, 0.6)                  # middle of the pallet
-    assert not m.reachable(0.1, 0.7, 1.2)              # far top corner
-    assert not m.reachable(0.6, 0.1, 0.15)             # in front of the pedestal, low
+    f = eur_at_station(cell)
+    r = PalletReach(m, f.to_world, f.size_u, f.size_v)
+    assert r.usable_top_height(0.1, 1.2) == pytest.approx(1.05)
+    assert r.reachable(0.6, 0.4, 0.6)                  # middle of the pallet
+    assert not r.reachable(0.1, 0.7, 1.2)              # far top corner
+    assert not r.reachable(0.6, 0.1, 0.15)             # in front of the pedestal, low
+    assert not r.reachable(0.6, 0.4, 1.4)              # above the map
 
 
 # ------------------------------------------------------------------------- planners

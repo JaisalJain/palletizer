@@ -143,20 +143,18 @@ def launch_setup(context, *args, **kwargs):
         OnProcessExit(target_action=jsb_spawner, on_exit=[jtc_spawner]))
 
     # Static cell frames, all from cell_config.yaml.
-    pal = cell['pallet']
-    pallet_origin = [
-        pal['center_xy'][0] - pal['size'][0] / 2,
-        pal['center_xy'][1] + pal['size'][1] / 2,
-        pal['size'][2],
-    ]
+    # (the pallet frame is published by pallet_perception from the MEASURED pallet)
     cam = cell['camera']
+    pcam = cell['pallet_camera']
     static_tfs = [
         _static_tf('pick_zone_tf', cell['pick_zone']['xyz'], [0, 0, 0], 'world', 'pick_zone'),
-        _static_tf('pallet_origin_tf', pallet_origin, [0, 0, 0], 'world', 'pallet_origin'),
         _static_tf('overhead_camera_tf', cam['xyz'], cam['rpy'], 'world', 'overhead_camera_link'),
         # REP-103 optical frame: z forward, x right, y down (relative to camera link x forward).
         _static_tf('overhead_camera_optical_tf', [0, 0, 0], [-1.5707963, 0, -1.5707963],
                    'overhead_camera_link', 'overhead_camera_optical_frame'),
+        _static_tf('pallet_camera_tf', pcam['xyz'], pcam['rpy'], 'world', 'pallet_camera_link'),
+        _static_tf('pallet_camera_optical_tf', [0, 0, 0], [-1.5707963, 0, -1.5707963],
+                   'pallet_camera_link', 'pallet_camera_optical_frame'),
     ]
 
     nodes = [gazebo, spawn_robot, robot_state_publisher, bridge, cloud_relay,
@@ -177,7 +175,7 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('gui', default_value='true', description='Start the Gazebo GUI'),
+        DeclareLaunchArgument('gui', default_value='false', description='Start the Gazebo GUI'),
         DeclareLaunchArgument('rviz', default_value='',
                               description='Start RViz (default: same as gui)'),
         DeclareLaunchArgument('rtf', default_value='1.0',

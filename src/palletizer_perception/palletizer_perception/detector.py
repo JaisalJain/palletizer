@@ -88,6 +88,17 @@ class BoxDetector:
     def pixel_pitch(self, z):
         return (self.cam_pos[2] - z) / self._K[0, 0]
 
+    def occluded(self, depth):
+        """Something higher than any box over the pick ROI (e.g. the forearm): the view of
+        the box may be blocked."""
+        with np.errstate(invalid='ignore'):
+            P = self.world_points(np.where(np.isfinite(depth), depth, np.nan))
+            roi = ((P[..., 0] >= self.roi_x[0]) & (P[..., 0] <= self.roi_x[1]) &
+                   (P[..., 1] >= self.roi_y[0]) & (P[..., 1] <= self.roi_y[1]))
+            high = roi & (P[..., 2] - self.belt_z > self.p['max_object_height'] +
+                          self.p['occluder_clearance'])
+        return int(high.sum()) > 20
+
     # ------------------------------------------------------------------ detection
     def detect(self, depth, rgb=None):
         """Returns (faces sorted downstream-first, debug dict). depth in meters (HxW)."""

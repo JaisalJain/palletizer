@@ -12,9 +12,13 @@ robot:
     size: [0.25, 0.25, 0.70]      # x, y, z; base_link sits on top of it
     xy: [0.0, 0.0]
     mass: 80.0
-  # Joint home pose: arm parked over the pallet side, out of the overhead camera's view,
-  # suction cup pointing down. (pan = +pi/2 would put the same pose above the pick zone.)
+  # Reference arm configuration (elbow up, wrist down, arm toward the pallet side): the IK
+  # seed; its pan is rotated toward each target.
   home: [-1.5708, -1.5708, 1.5708, -1.5708, -1.5708, 0.0]
+  # Park / start pose: TCP at (0.35, 0.08, 1.65), cup down. Outside BOTH camera views (the
+  # pallet camera must see the station while the arm waits) and high enough that a carried
+  # box clears a full pallet sliding out of the station (stack top <= 1.2 m + deck).
+  park: [-0.282, -1.842, 0.948, -0.677, -1.571, -0.282]
 
 gripper:
   body_radius: 0.04               # suction body cylinder
@@ -72,13 +76,32 @@ pick_zone:
   xyz: [0.0, 0.80, 0.80]
   roi_x: [-0.65, 0.45]            # perception ROI along the belt (world x)
 
-pallet:
-  size: [1.2, 0.8, 0.144]         # EUR pallet
+pallet_station:
+  # The AREA where the pallet conveyor delivers pallets. This is all the robot knows: pallet
+  # dims and pose are measured by pallet_perception (overhead RGB-D above the station).
   center_xy: [0.0, -0.60]
-  mass: 25.0
-  max_stack_height: 1.2           # above the pallet top surface
-  # pallet_origin frame = corner of the pallet's top surface nearest the robot, on the -x side
-  # (computed: x = cx - sx/2, y = cy + sy/2, z = sz), axes aligned with world.
+  area: [1.32, 0.92]              # x, y extent a pallet (incl. its pose tolerance) lies within
+  max_stack_height: 1.2           # limit for the box-top height above the measured deck
+  max_deck_z: 0.16                # highest pallet deck the station accepts [m] (the offline
+                                  # reachability map models the station floor up to it)
+  # pallet frame (packing): origin at the deck corner nearest the robot on the -u side;
+  # v = pallet axis pointing away from the robot, u = v rotated by +90 deg, z above the deck.
+
+pallet_camera:
+  xyz: [0.0, -0.60, 2.80]         # above the station centre; the whole station area and a
+                                  # max-height stack are in view, above the robot's workspace
+  rpy: [0.0, 1.5708, 1.5708]      # looking straight down, image rows along world y
+                                  # (the long image side along x, the pallet length)
+  width: 800
+  height: 600
+  hfov: 0.9                       # rad; ~3.2 mm/pixel at the deck, ~1.8 mm at 1.2 m
+  rate: 5.0                       # Hz
+  near: 0.1
+  far: 4.0
+  depth_noise_stddev: 0.002       # same noise model as the conveyor camera
+  pixel_center_offset: 0.5
+  mast_xy: [0.0, -1.55]           # outside the pallet lane
+  mast_size: [0.08, 0.08, 2.90]
 
 camera:
   xyz: [0.0, 0.80, 2.30]          # 1.5 m above the belt at the pick zone
@@ -111,19 +134,46 @@ perception:
   max_side: 0.66                  # a top face longer than this is treated as merged boxes
   color_split_min_dist: 12.0      # min RGB cluster distance (0-255) to split merged boxes
   detect_timeout: 3.0             # s
-  # Refuse to detect while the robot hangs over the pick ROI (it would occlude the box):
-  occlusion_links: [upper_arm_link, forearm_link, wrist_1_link, wrist_2_link, wrist_3_link,
-                    suction_cup]
+  # Refuse to detect while the robot occludes the box: the tool (TF) over the ROI, or any
+  # pixel over the ROI higher than a box can be (the folded elbow after a near-row place
+  # hangs over the ROI but high; it only matters if it covers the view)
+  occlusion_links: [wrist_2_link, wrist_3_link, suction_cup]
   occlusion_margin: 0.10          # [m] around the ROI rectangle
+  occluder_clearance: 0.05        # pixels > max_object_height + this above the belt = occluder
+
+pallet_perception:
+  frames: 4                       # depth frames averaged (the stack is static between places)
+  deck_z_range: [0.05, 0.40]      # plausible deck-top heights above the floor [m]
+  plateau_tol: 0.008              # deck / top-face pixels within this of their plateau [m]
+  plateau_bin: 0.003              # height histogram bin [m]
+  deck_close: 0.10                # close gaps between deck boards up to this [m]
+  min_deck_area: 0.25             # [m^2]
+  min_side: 0.4                   # a deck side shorter than this is not a pallet [m]
+  change_threshold: 0.015         # per-pixel height change that counts [m]
+  min_change_area: 0.0015         # changed area worth looking at [m^2] (15 x 100 mm)
+  new_box_tol: 0.02               # new top-face pixels within this of the commanded top [m]
+  min_new_box_fill: 0.85          # measured pixel area / fitted rectangle, else not detected
+  shift_threshold: 0.020          # a placed box moved more than this -> SHIFT event [m]
+  collapse_dz: 0.05               # a top dropped more than this -> COLLAPSE event [m]
+  monitor_period: 2.0             # [s] between stack checks while the view is clear
+  disagreement_tol: 0.015         # perceived vs placement-record height map [m]
+  measure_timeout: 60.0           # [s] to get an unoccluded view
+  # (upper_arm_link's origin is the shoulder, always on the base axis next to the station)
+  occlusion_links: [forearm_link, wrist_1_link, wrist_2_link, wrist_3_link, suction_cup]
+  occlusion_margin: 0.10          # [m] around the station area
+  occluder_clearance: 0.25        # a pixel over the station higher than deck + max stack +
+                                  # this is an occluder (robot / carried box) -> frame unusable
 
 motion:
   planning_group: manipulator
   tcp_link: suction_tcp
-  ptp_velocity_scaling: 0.6
-  ptp_acceleration_scaling: 0.4
-  lin_velocity_scaling: 0.25       # of pilz cartesian limits (1.0 m/s)
-  lin_acceleration_scaling: 0.25
-  lin_slow_velocity_scaling: 0.08  # last approach centimetres (descent into contact / release)
+  ptp_velocity_scaling: 1.0        # (v2 speed-up; v1: 0.6 / 0.4 / 0.25 / 0.25 / 0.08)
+  ptp_acceleration_scaling: 0.8
+  lin_velocity_scaling: 0.6        # of pilz cartesian limits (1.0 m/s)
+  lin_acceleration_scaling: 0.45
+  lin_slow_velocity_scaling: 0.1   # last approach centimetres (descent into contact / release)
+  lin_fallback_scaling: [0.25, 0.25]  # velocity/acceleration when the fast LIN plan exceeds a
+                                   # joint limit (Pilz error -1): the same line, slower
   slow_zone: 0.03                  # [m] length of the slow final approach
   pre_grasp_height: 0.15           # above the detected top-face center
   pick_gap: 0.003                  # cup face this far above the top face when suction turns on
@@ -141,9 +191,9 @@ motion:
   retreat_height: 0.15
   grasp_confirm_timeout: 1.0       # s
   release_confirm_timeout: 1.0
-  release_settle: 0.4              # s to wait after release before retreating
-  weigh_window: 0.4                # s F/T averaging window
-  weigh_settle: 0.3                # s to wait after the lift before weighing
+  release_settle: 0.15             # s to wait after release before retreating
+  weigh_window: 0.25               # s F/T averaging window
+  weigh_settle: 0.15               # s to wait after the lift before weighing
   planning_time: 5.0
   ompl_fallback: true
   # Collision model of the carried box: slightly smaller than measured so that the surface it
@@ -152,15 +202,29 @@ motion:
   held_box_bottom_clearance: 0.015 # [m] trimmed from the bottom
 
 reachability:
-  file: reachability_ur10e.npz     # in palletizer_motion/config (built offline)
-  grid_step: 0.05                  # [m] over the pallet footprint (box-center positions)
-  edge_inset: 0.10                 # smallest possible box half-size
-  top_heights: [0.15, 1.20, 0.05]  # [first, last, step] box-top height above pallet top
-  min_coverage: 1.0                # usable stack height = highest level with this coverage
+  file: reachability_ur10e.npz     # in palletizer_motion/config (built offline, world frame)
+  grid_step: 0.05                  # [m] box-centre positions over the station area
+  edge_inset: 0.08                 # smallest box half-size considered [m]
+  top_z: [0.25, 1.45, 0.05]        # [first, last, step] box-top height, WORLD z [m]
+  min_coverage: 1.0                # usable stack height (per measured pallet) = highest level
+                                   # with this coverage over the pallet footprint
 
 packing:
-  planner: heuristic               # naive | heuristic
+  mode: mixed                      # mixed (v1 planners) | single_sku (layer patterns)
+  planner: heuristic               # mixed mode: naive | heuristic
   resolution: 0.01                 # height-map grid [m]
+  cell_overlap_tol: 0.003          # a footprint covers a cell if it overlaps it by > this [m]
+  perception_merge: true           # plan on the perceived height map (merged with the record)
+  map_wait: 3.0                    # [s] wait for a perceived map that includes the last commit
+  # single_sku mode
+  pattern_gap: 0.005               # gap between boxes in a layer pattern [m]
+  sku_tolerance: 0.010             # same SKU if every measured dim is within this [m]
+  pattern:
+    priority: count                # count: max boxes/layer, column stack if no same-count
+                                   # interlock | interlock: may drop boxes/layer to interlock
+    interlock_drop: 1              # boxes per layer 'interlock' may give up
+    min_interlock: 0.3             # fraction of boxes that must bridge two below
+    max_layouts: 400
   gap: 0.01                        # horizontal gap left between boxes [m] (placement tolerance)
   candidate_step: 0.05             # coarse grid of footprint corners [m] (+ contact points)
   support_ratio: 0.75              # min supported fraction of the base area
@@ -180,7 +244,9 @@ packing:
     w_contact: 0.4                 # minus fraction of the box perimeter in contact
     w_roughness: 0.3               # height-map roughness change [m]
     rerank_top_n: 25               # re-rank the best n by the big-box reservation term:
-    reserve_footprint: [0.5, 0.5]  # keep a flat region that can host a box this large
+    reserve_footprint: [0.5, 0.5]  # planner HYPERPARAMETER (not a box size the robot relies
+                                   # on): keep a flat region of this size free for a large
+                                   # box, tuned offline on the mixed stream; boxes are measured
     w_reserve: 1.0                 # penalty for destroying the last such region
     w_regions: 0.002               # bonus per remaining region position (capped at 200)
   physics:
@@ -199,6 +265,14 @@ perception_eval:
   dim_max_mm: 12.0
   center_mean_mm: 5.0
   yaw_mean_deg: 1.5
+
+# Acceptance thresholds (v2 Milestone B pallet perception). Do not loosen.
+pallet_perception_eval:
+  dims_mm: 10.0                    # measured pallet deck dims
+  pose_mm: 10.0                    # measured pallet centre
+  yaw_deg: 1.0
+  height_map_mm: 10.0              # perceived height map vs ground truth, occupied cells
+  placement_agree_mm: 5.0          # camera placement error vs ground-truth placement error
 
 # Acceptance thresholds (Milestone C pick_place test). Do not loosen.
 pick_place_test:
@@ -228,8 +302,8 @@ spawner:
   # Select with box_spawner params sku:=<key> or order:="<key>:<count>, <key>:<count>";
   # a key that is not in the catalog is parsed as external dims in mm ("347x253x219").
   catalog:
-    600x400x400: {size: [0.594, 0.394, 0.400], mass: [10.0, 15.0]}
-    600x400x300: {size: [0.594, 0.394, 0.300], mass: [8.0, 12.0]}
+    600x400x400: {size: [0.594, 0.394, 0.400], mass: [8.0, 11.5]}    # UR10e payload 12.5 kg
+    600x400x300: {size: [0.594, 0.394, 0.300], mass: [7.0, 10.5]}
     400x300x300: {size: [0.394, 0.294, 0.300], mass: [5.0, 7.5]}
     400x300x200: {size: [0.394, 0.294, 0.200], mass: [4.0, 6.0]}
     300x200x200: {size: [0.294, 0.194, 0.200], mass: [2.0, 3.0]}
@@ -246,3 +320,14 @@ exchanger:
     EUR:      {size: [1.2, 0.8, 0.144], mass: 25.0}      # EUR 1 (ISO 6780)
     1000x800: {size: [1.0, 0.8, 0.144], mass: 20.0}
     HALF:     {size: [0.8, 0.6, 0.144], mass: 10.0}      # EUR 6 half pallet
+  order: [EUR]                    # pallet types delivered in turn (the last one repeats);
+                                  # overridden by the pallet_exchanger param `pallets`
+  lane_y: -0.60                   # pallets slide along +x on this line
+  entry_x: -2.9                   # a new pallet comes in from here ...
+  exit_x: 2.9                     # ... and a full one leaves to here (then it is removed)
+  speed: 0.35                     # [m/s]
+  accel: 0.4                      # [m/s^2]
+  # Delivered pose = station centre + uniform noise. Must stay inside pallet_station.area
+  # (the world-frame reachability map covers it): EUR at 1.5 deg + 2 cm spans 1.26 x 0.87 m.
+  pose_noise_xy: 0.02             # +/- [m]
+  pose_noise_yaw: 0.026           # +/- [rad] (1.5 deg)
