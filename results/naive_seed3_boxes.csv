@@ -1,0 +1,1 @@
+run,planner,seed,pallet,box_index,sim_name,outcome,success,det_L,det_W,det_H,true_L,true_W,true_H,dim_err_max_mm,measured_mass,true_mass,mass_err_kg,planning_time_s,candidates,physics_checks,target_x,target_y,target_z,target_yaw_deg,rotated,place_err_mm,place_err_xy_mm,place_yaw_err_deg,cycle_time_s,detect_attempts,grasp_attempts,wall_time
