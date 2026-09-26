@@ -111,10 +111,16 @@ conveyor_controller --box_ready--> orchestrator (BT) --DetectBox--> box_percepti
   feasible in a far-to-near, left-to-right scan. Heuristic = DBL score (rest height, max-height
   increase, far rows, left, side contact, roughness) + deck-area term + re-ranking that keeps a flat
   region for a 0.5 m box; the top 3 are verified by PyBullet (1.5 s, ≤ 10 mm / 2°).
+  Both planners take an optional motion `validator` (the ROS wrapper plugs in
+  `/motion/check_placement`: IK + collision validity of release, pre-place, above-target and a
+  mid-LIN sample in the *current* scene), applied in ranked order, ≤ `packing.motion_check_max`
+  calls per plan. `PlanPlacement.exclude` skips targets that already failed in motion.
 - **Orchestrator** (`trees/palletize.xml`): Park → loop{MorePallets → Cycle}. Cycle: WaitBoxReady →
   DetectBox (retry 3, else Park + reject) → pre-check fit (pallet full → PalletSwap) → PickBox (retry
   once, else Park + reject) → ResumeConveyor → PlanPlacement with the measured mass (full → swap) →
-  PlaceBox + VerifyRelease (retry once, else reject the held box) → CommitPlacement → ReportCycle.
+  PlaceBox + VerifyRelease (on failure re-plan excluding that target and place once more, else
+  reject the held box) → CommitPlacement → ReportCycle. DetectBox failure → Park → 3 retries
+  with 0.5 s delay → reject.
   PalletSwap = FinishPallet (report) → ClearPallet → ResetPackingModel → ClearPlanningScene.
   Groot2 on port 1667.
 
@@ -144,8 +150,13 @@ headless manual-mode stack for the scripted tests.
   the first box with no feasible placement. See docs/RESULTS.md for the analysis.
 - Simulated sensing and actuation are ideal (pinhole camera, no blur, joint position control) →
   perception and placement errors are far below the thresholds; expect several mm on hardware.
-- `PlanPlacement` has no "exclude this target" field; a failed place is retried once at the same
-  target, then the held box is rejected.
+- The offline reachability map is computed on an EMPTY pallet; tall stacks near the pedestal can
+  block the upper arm for other targets → the motion validator is what catches that (costs
+  ~1–3 s of planning per box).
+- box_spawner must not spawn before its previous box appears in `/sim/box_poses` (with sim time
+  the timer fires twice back-to-back at startup; two boxes were spawned into each other).
+- Startup races: the motion server waits for `/joint_states` before serving (controllers can
+  come up after the orchestrator).
 - Swing routing uses the canonical pan (TCP bearing in (−180°, 180°]); never pick 2π branches
   relative to the current pan (it drifts until the +x route hits the joint limit and the arm
   swings through the queue — this knocked boxes off the belt).

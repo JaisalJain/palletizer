@@ -50,6 +50,7 @@ ros2 service call /perception/detect_box palletizer_interfaces/srv/DetectBox
 ros2 service call /conveyor_controller/resume std_srvs/srv/Trigger
 ros2 service call /conveyor_controller/stop std_srvs/srv/Trigger
 ros2 service call /motion/park std_srvs/srv/Trigger
+ros2 service call /packing/reset std_srvs/srv/Trigger
 ros2 topic pub --once /suction/cmd std_msgs/msg/Bool "{data: true}"
 ros2 topic echo /orchestrator/cycle_report
 ```

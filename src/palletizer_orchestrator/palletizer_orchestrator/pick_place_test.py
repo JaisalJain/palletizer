@@ -31,6 +31,10 @@ from std_srvs.srv import Trigger
 
 from palletizer_tools.sim_client import SimClient
 
+# Planning includes motion-feasibility checks (~1-3 s each, up to motion_check_max): same
+# budget as the behavior tree's PlanPlacement node.
+PLAN_TIMEOUT = 90.0
+
 
 def yaw_err(a, b, square):
     period = math.pi / 2 if square else math.pi
@@ -109,7 +113,8 @@ class PickPlaceTest:
             sim.call(sim.resume_cli, Trigger.Request())
             return row
         box = det.box
-        pre = sim.call(self.plan, PlanPlacement.Request(box=box, mass=0.0, check_only=True))
+        pre = sim.call(self.plan, PlanPlacement.Request(box=box, mass=0.0, check_only=True),
+                       timeout=PLAN_TIMEOUT)
         if not pre.success:
             self.swap()
             row['pallet_swap_before'] = 1
@@ -126,17 +131,20 @@ class PickPlaceTest:
             sim.call(sim.resume_cli, Trigger.Request())
             return row
         sim.call(sim.resume_cli, Trigger.Request())
-        pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass))
+        pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass),
+                      timeout=PLAN_TIMEOUT)
         if not pl.success:
             self.swap()
             row['pallet_swap_after'] = 1
-            pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass))
+            pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass),
+                      timeout=PLAN_TIMEOUT)
         before = {n: sim.box_poses[n][0].copy() for n in self.on_pallet if n in sim.box_poses}
         rr = self.action(self.place, PlaceBox.Goal(placement=pl.placement, box=box))
         if not rr.success:          # same recovery as the behavior tree: re-plan elsewhere
             row['replanned'] = 1
             pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass,
-                                                           exclude=[pl.placement]))
+                                                           exclude=[pl.placement]),
+                          timeout=PLAN_TIMEOUT)
             if pl.success:
                 rr = self.action(self.place, PlaceBox.Goal(placement=pl.placement, box=box))
         row['motion_time_s'] = time.time() - t0

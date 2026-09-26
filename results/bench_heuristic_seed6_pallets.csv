@@ -1,0 +1,2 @@
+run,planner,seed,pallet,boxes,rejected,box_volume_m3,fill_percent,max_height_m,collapses,lost_boxes,duration_s,picks_per_min,mean_planning_time_s,max_planning_time_s,mean_cycle_time_s,mean_place_err_mm,max_place_err_mm,mean_mass_err_kg,end_reason,wall_time
+bench_heuristic_seed6,heuristic,6,0,10,0,0.3555325505444431,35.27108636353602,0.8923244173795154,0,0,324.552,1.8487022110478444,4.201366632099962,9.545666820999031,31.6171,0.03497589505440999,0.10916077072421883,0.0065586034512229215,full,1790409138.602471

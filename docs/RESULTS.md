@@ -1,26 +1,43 @@
 # Results
 
-All numbers are produced by scripts in this repo; re-run them to reproduce.
+All numbers are produced by scripts in this repo on the final code; re-run them to reproduce.
+
+## Acceptance summary (v1 "DONE" criteria)
+
+| # | Criterion | Result | Evidence |
+|---|---|---|---|
+| 1 | Clean colcon build; all v0 tests pass; packing pytest passes | from-scratch build without warnings, plugins link the vendored gz-sim; v0 suite 5/5; pytest 21/21 | `src/palletizer_tools/test/run_all.sh`, `python -m pytest src/palletizer_packing/test` |
+| 2 | Perception thresholds | 68/68 detected; dims mean 0.04 / max 0.32 mm; grasp centre 0.03 mm; yaw 0.009° | [Milestone B](#milestone-b--perception) |
+| 3 | pick_place test | 20/20 (≥ 19); placement max 0.13 mm; yaw max 0.07°; neighbours moved 0 mm | [Milestone C](#milestone-c--moveit-2-pick-and-place) |
+| 4 | 3 unattended heuristic pallets, 0 collapses, 0 unrecovered failures | 3 pallets, 20/20 boxes placed, 0 collapses, 0 lost boxes, 0 rejects | [Milestone E](#milestone-e--autonomous-operation) |
+| 5 | ≥ 5 pallets per planner on the same seeds, heuristic fill > naive | 24 pallets each at RTF 1.0: heuristic 24.9 % vs naive 19.6 %, paired +5.3 (p = 0.005); 0 collapses / lost / rejects in all 48 | [Benchmark](#milestone-e--benchmark) |
+| 6 | Docs updated, everything committed | CLAUDE.md, README.md, this file | git history |
 
 ## Milestone B — Perception
 
 `ros2 run palletizer_perception eval_perception --n 60 --seed 7` (sim running with
-`box_perception`). 60 seeded random boxes from the spawner distribution (sides 0.2–0.6 m,
-height 0.15–0.4 m, yaw ±25°) resting in the pick zone with the leading edge at the pick
-photo-eye; depth noise σ = 2 mm; 5 depth frames averaged per detection.
-Raw data: `results/perception_eval.csv`.
+`box_perception`): **60 seeded random boxes + 8 worst-case boxes** (max size at ±25°, overhanging
+the belt; min size) from the spawner distribution (sides 0.2–0.6 m, height 0.15–0.4 m, yaw ±25°),
+resting in the pick zone with the leading edge at the pick photo-eye; depth noise σ = 2 mm; 5
+depth frames averaged per detection. Raw data: `results/perception_eval.csv`.
 
 | Metric | Result | Threshold | |
 |---|---|---|---|
-| Detections | 60/60 | all | PASS |
-| Dimension error, mean (L, W, H pooled) | 0.05 mm | ≤ 5 mm | PASS |
-| Dimension error, max | 0.92 mm | ≤ 12 mm | PASS |
-| Per dimension mean L / W / H | 0.07 / 0.05 / 0.02 mm | | |
-| Grasp-center (top-face center) error, mean / max | 0.05 / 0.58 mm | mean ≤ 5 mm | PASS |
+| Detections | 68/68 | all | PASS |
+| Dimension error, mean (L, W, H pooled) | 0.04 mm | ≤ 5 mm | PASS |
+| Dimension error, max | 0.32 mm | ≤ 12 mm | PASS |
+| Per dimension mean L / W / H | 0.04 / 0.04 / 0.02 mm | | |
+| Worst-case boxes only: dimension error max | 0.32 mm | | |
+| Grasp-center (top-face center) error, mean / max | 0.03 / 0.25 mm | mean ≤ 5 mm | PASS |
 | Yaw error, mean / max | 0.009 / 0.131° | mean ≤ 1.5° | PASS |
 
 Yaw error is computed modulo 180° (a rectangle's axis); for boxes with |L − W| < 10 mm
-(2 of 60) modulo 90°, because "length" is then ambiguous.
+(6 of 68) modulo 90°, because "length" is then ambiguous.
+
+**ROI.** Boxes up to 0.6 m at 25° span 0.8 m and overhang the 0.6 m belt; an early ROI of
+belt ± 5 cm clipped them (found in the auto run as ~8 mm short dimensions), hence belt ± 0.16 m
+and the worst-case boxes in the evaluation. Depth frames count as fresh by their header stamp
+(sim time): frames queued while the node was busy once showed a box that was still moving.
 
 **Method.** Back-project depth to world, subtract the belt plane, find top faces as connected
 regions on height plateaus (histogram peaks), intersect each top-face pixel ray with the
@@ -101,9 +118,9 @@ Raw data: `results/pick_place_test_seed42.csv`.
 | Metric | Result | Threshold | |
 |---|---|---|---|
 | Boxes meeting all criteria | 20/20 | ≥ 19/20 | PASS |
-| Placement position error (top-face centre, 3D), mean / max | 0.03 / 0.06 mm | ≤ 15 mm | PASS |
-| … horizontal only, mean / max | 0.02 / 0.06 mm | | |
-| Yaw error, mean / max | 0.011 / 0.068° | ≤ 3° | PASS |
+| Placement position error (top-face centre, 3D), mean / max | 0.04 / 0.13 mm | ≤ 15 mm | PASS |
+| … horizontal only, mean / max | 0.03 / 0.13 mm | | |
+| Yaw error, mean / max | 0.010 / 0.068° | ≤ 3° | PASS |
 | Max displacement of an already-placed box | 0.00 mm | ≤ 10 mm | PASS |
 | F/T mass error, mean / max | 5 / 10 g | (extra) | |
 
@@ -126,6 +143,8 @@ cause was fixed at the root, no threshold was touched:
 | "Above target" goal in collision | reaching high over the far side put the upper arm into a tall stack next to the pedestal | choose the highest collision-free above-pose; on place failure re-plan excluding the failed target |
 | Cup 4–5.5 cm off-centre (NO_GRASP) | perception averaged queued frames rendered while the box was still moving | freshness by header stamp (sim time), not arrival |
 | Next run's controllers failed to start | gz/move_group outlived `ros2 launch`; a leftover controller_manager answered | `kill_sim.sh` between runs |
+| Cup landed 4–5.5 cm off (NO_GRASP) / −45 kg weighings / 10 mm offsets | spawner timer fired twice at startup (sim time) → first two boxes spawned into each other | spawn only after the previous box is visible |
+| 8 rejects + 1 collapse in one pallet | tall stack near the pedestal blocked the upper arm; the reachability map is from an empty pallet | motion-feasibility validator in the planners |
 
 The very small errors reflect the simulator (joint position control, exact kinematics, ideal
 suction attach); on a real robot placement will be dominated by perception and grasp slip.
@@ -133,35 +152,42 @@ suction attach); on a real robot placement will be dominated by perception and g
 ## Milestone D — Packing
 
 ### Unit tests
-`python -m pytest src/palletizer_packing/test` → 19 passed (height map, bounds/height/reach-over,
-support ratio, COM rule, mass rule, reachability lookup incl. the real map, candidate
-generation, naive scan order, heuristic DBL, packing validity for both planners (no 3D overlaps,
-all rules hold), PyBullet checker (stable box accepted, tipping box rejected), heuristic with
-physics, Gymnasium `check_env` + masked rollout, heuristic > naive on held-out seeds).
+`python -m pytest src/palletizer_packing/test` → **21 passed**: height map, bounds / height /
+reach-over, support ratio, COM rule, mass rule, reachability lookup (incl. the real map),
+candidate generation, naive scan order, heuristic DBL, packing validity for both planners (no 3D
+overlaps, all rules hold), PyBullet checker (stable box accepted, tipping box rejected),
+heuristic + physics, motion-validator hook (both planners), Gymnasium `check_env` + masked
+rollout, heuristic > naive on held-out seeds.
 
-### Why fill % is low, and what the heuristic changes (offline, same rules, physics off)
+### Why fill % is low
 Box sides are 0.2–0.6 m on a 1.2 × 0.8 m deck, the support rule needs ≥ 75 % of the base within
-5 mm of the resting height, and a pallet ends at the **first** box with no feasible placement.
-With random heights, two different boxes almost never form a common plane, so a box can stand
-only on the deck or on a single larger top. After ~6 boxes the deck is covered and the next
-large box ends the pallet — for both planners (they tie on most seeds). Measured over 60 seeds
-(100–159, the tuning set):
+5 mm of the resting height, the usable stack height is 1.05 m, and a pallet ends at the **first**
+box with no feasible placement. With random heights two different boxes almost never form a
+common plane, so a box can stand only on the deck or on a single larger top; after ~4–7 boxes a
+large box arrives that fits nowhere — for both planners, which therefore tie on about half of all
+seeds. Fill ≈ 20–30 % is a property of this problem (no buffer / lookahead, strict support), not
+of the implementation.
 
-| Variant | Fill % (mean) | Notes |
-|---|---|---|
-| Naive (first feasible, far→near, left→right) | 23.4 | already DBL-like |
-| Heuristic, initial DBL weights | 24.8 (20 seeds) | rest height weighted high → small boxes use deck area |
-| + "future options" count (full feasibility per reference box) | 26.3 (20 seeds) | ~35 s planning / pallet → rejected |
-| + deck-area term, rest-height weight 0.3 | 24.9 | paired +1.5, p = 0.13 |
-| **+ big-box region reservation (final)** | **25.7** | paired **+2.3**, better 18 / worse 8 / equal 34, Wilcoxon **p = 0.038** |
+### Planner development (offline, same rules + reachability map, physics off)
+| Variant | Seeds | Heuristic − naive (fill %) | better / worse / equal | Wilcoxon p |
+|---|---|---|---|---|
+| Initial DBL weights (no reach map) | 100–119 | +2.2 | – | – |
+| + "future options" (full feasibility per reference box) | 100–119 | +3.7 | – | – (35 s/pallet, rejected) |
+| + deck-area term + big-box region reservation (**final**) | 100–159 (tuning) | **+2.9** | 19 / 6 / 35 | **0.004** |
+| final | 200–259 (held out) | **+2.4** | 16 / 7 / 37 | **0.038** |
+| final + "dead space" term (w = 2) | 100–159 / 200–259 | +3.2 / +2.0 | 19/5/36 · 15/13/32 | 0.001 / 0.21 → **overfits, not adopted** |
 
-Held-out check in the unit test (seeds 200–239): naive 27.1 %, heuristic 29.3 %, better on 11,
-worse on 7, equal on 22. The absolute level is set by the problem (box sizes vs deck, strict
-support rule, stop at the first misfit), not by planner quality; mixed-SKU layer building or a
-buffer/lookahead of several boxes would be the next lever.
+The deck term keeps the deck for boxes that cannot stand on another box; the reservation term
+re-ranks the best 25 candidates so that a flat region for a 0.5 m box survives when possible.
 
-Planning time (heuristic incl. PyBullet on the top 3 candidates) is reported per box in the
-benchmark below.
+### Motion feasibility in the loop
+The reachability map is computed on an **empty** pallet. In an early benchmark run the heuristic
+built a 1.1 m stack 0.55 m from the base; afterwards every target on the −x side was unreachable
+(upper arm vs that stack) → 8 rejected boxes and a collapse. Both planners now call a motion
+validator (`/motion/check_placement`: IK + collision validity of the release, pre-place,
+above-target and a mid-LIN pose in the current scene) on their best candidates (≤ 12 per plan).
+This is the main cost in heuristic planning time (≈ 4 s per box incl. PyBullet on the top 3,
+vs ≈ 0.5 s for naive).
 
 ## Milestone E — Autonomous operation
 
@@ -171,15 +197,79 @@ Run `auto3_heuristic` (raw data: `results/auto3_heuristic_*.csv`). Box outcomes:
 
 | Pallet | Boxes | Rejected | Fill % | Max height [m] | Collapses | Lost boxes | Duration [s] | Picks/min | Mean planning [ms] | Mean place err [mm] | End |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 0 | 7 | 0 | 36.5 | 0.89 | 0 | 0 | 171 | 2.46 | 271 | 0.06 | full |
-| 1 | 6 | 0 | 22.0 | 0.65 | 0 | 0 | 143 | 2.51 | 236 | 0.02 | full |
-| 2 | 6 | 0 | 24.6 | 0.80 | 0 | 0 | 153 | 2.35 | 125 | 0.05 | full |
+| 0 | 7 | 0 | 36.5 | 0.89 | 0 | 0 | 223 | 1.89 | 3463 | 0.05 | full |
+| 1 | 6 | 0 | 22.0 | 0.65 | 0 | 0 | 191 | 1.88 | 2606 | 0.02 | full |
+| 2 | 6 | 0 | 24.6 | 0.84 | 0 | 0 | 154 | 2.34 | 1297 | 0.04 | full |
 
-Placed boxes: 20; max dimension error 0.28 mm; F/T mass error mean 6 g / max 10 g.
+Placed boxes: 20; max dimension error 0.30 mm; F/T mass error mean 6 g / max 10 g.
 
 <!-- AUTO3:END -->
 
 ## Milestone E — Benchmark
 
 <!-- BENCHMARK:BEGIN -->
+
+Real-time factor: 1.0. One pallet per (planner, seed) in a fresh headless simulation; the same seed gives both planners the same box sequence. Mean ± std over pallets. Raw data: `results/bench_*`.
+
+| Planner | Pallets | Seeds | Fill % | Boxes / pallet | Max height [m] | Collapses | Lost boxes | Rejected | Picks / min | Planning time [ms] | Cycle time [s] | Place err [mm] | Mass err [kg] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| naive | 24 | 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 | 19.6 ± 7.2 | 4.5 ± 1.8 | 0.62 ± 0.18 | 0 | 0 | 0 | 2.12 ± 0.26 | 551 ± 1194 | 24.1 ± 1.6 | 0.06 ± 0.09 | 0.005 ± 0.003 |
+| heuristic | 24 | 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 | 24.9 ± 9.5 | 5.6 ± 2.5 | 0.68 ± 0.20 | 0 | 0 | 0 | 1.77 ± 0.23 | 4203 ± 4428 | 30.9 ± 7.8 | 0.04 ± 0.04 | 0.005 ± 0.003 |
+
+Paired per seed (heuristic − naive, fill %): mean +5.31, heuristic better on 10, equal on 12, worse on 2 of 24 seeds, Wilcoxon signed-rank p = 0.005.
+
+| Seed | naive fill % (boxes) | heuristic fill % (boxes) |
+|---|---|---|
+| 1 | 17.2 (4) | 17.2 (4) |
+| 2 | 14.4 (3) | 19.3 (4) |
+| 3 | 34.8 (7) | 29.6 (6) |
+| 4 | 17.7 (2) | 17.7 (2) |
+| 5 | 16.1 (3) | 16.1 (3) |
+| 6 | 16.5 (5) | 35.3 (10) |
+| 7 | 36.5 (7) | 36.5 (7) |
+| 8 | 13.3 (5) | 24.5 (6) |
+| 9 | 10.8 (3) | 30.3 (6) |
+| 10 | 30.3 (6) | 51.8 (11) |
+| 11 | 19.0 (4) | 29.7 (8) |
+| 12 | 28.2 (7) | 28.1 (7) |
+| 13 | 21.2 (3) | 21.2 (3) |
+| 14 | 18.5 (4) | 18.5 (4) |
+| 15 | 16.6 (3) | 16.6 (3) |
+| 16 | 25.4 (8) | 25.4 (8) |
+| 17 | 9.1 (3) | 16.5 (4) |
+| 18 | 23.0 (7) | 16.6 (4) |
+| 19 | 15.9 (3) | 35.4 (9) |
+| 20 | 15.8 (4) | 29.3 (7) |
+| 21 | 19.8 (4) | 19.8 (4) |
+| 22 | 25.1 (7) | 37.1 (9) |
+| 23 | 8.7 (2) | 8.7 (2) |
+| 24 | 17.4 (4) | 17.4 (4) |
+
 <!-- BENCHMARK:END -->
+
+### Reading the benchmark
+- **Setup.** `ros2 run palletizer_orchestrator benchmark --planners naive heuristic --seeds 1 … 24
+  --rtf 1.0`: 48 pallets, each in a fresh headless simulation at real-time factor **1.0**, same box
+  sequence per seed for both planners. Seeds 1–24 are disjoint from the tuning (100–159) and
+  held-out (200–259) seeds. One run (heuristic, seed 2) hit a startup race on its first attempt
+  (motion server crashed on an early request before `/joint_states`; fixed afterwards) and was
+  re-run automatically; its first-attempt log is kept in `results/benchmark_logs.tar.xz`.
+- **Result.** Heuristic fill is higher: **24.9 % vs 19.6 %**, paired **+5.3 points, better on
+  10, worse on 2, equal on 12 of 24 seeds, Wilcoxon p = 0.005**. Zero collapses, zero lost boxes
+  and zero rejects in all 48 pallets.
+- **Why the sim gap is larger than offline.** Replaying the same 24 sequences with the geometric
+  model only (same rules + reachability map, no PyBullet, no motion checks) gives naive 21.2 %,
+  heuristic 24.0 %, paired **+2.8** (better 6 / worse 4, p = 0.11) — in line with +2.9 / +2.4 on
+  the 120 tuning/held-out seeds. 19/24 naive and 16/24 heuristic pallets end exactly as in the
+  replay; the others diverge where the live motion checks (both planners) and the PyBullet check
+  (heuristic only) steer to other candidates. Treat **+2.4 … +2.9 points** as the planner's
+  intrinsic advantage and +5.3 as what it achieves in this closed loop.
+- **Cost.** The heuristic is slower per box (planning ≈ 4.2 s vs 0.6 s; cycle 30.9 s vs 24.1 s;
+  1.77 vs 2.12 picks/min) because of the PyBullet check and more motion checks. Planning runs
+  while the robot is idle; overlapping it with the previous place would recover most of this.
+- **Earlier benchmark attempts (discarded, kept honest).** A first 8-seed run showed heuristic
+  24.0 % vs naive 24.2 %. Investigation found 5 of 16 runs where the spawner had spawned the
+  first two boxes into each other (sim-time timer catch-up), which corrupted exactly the two
+  heuristic "losses"; the spawner now waits until its previous box is visible. That run also
+  predates the motion validator.
+
