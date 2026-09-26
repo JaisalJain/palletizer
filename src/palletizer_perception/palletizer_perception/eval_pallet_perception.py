@@ -111,7 +111,7 @@ def main(argv=None):
         sim.exchange_pallet(pallet_type='EUR')
         sim.call(measure, MeasurePallet.Request(), timeout=60.0)
     gt, gyaw, _ = gt_frame(sim, 'EUR', robot_xy)
-    frame = PalletFrame.from_msg(sim.call(measure, MeasurePallet.Request(), timeout=60.0).pallet)
+    sim.call(measure, MeasurePallet.Request(), timeout=60.0)       # fresh model for this stack
     n_events0 = len(events)
     a, b, h1 = 0.394, 0.294, 0.300
     slots = []            # (u, v, du, dv, rest, height, perturb(du, dv, dyaw))

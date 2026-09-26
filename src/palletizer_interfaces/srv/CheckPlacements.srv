@@ -1,0 +1,8 @@
+# Motion feasibility of a sequence of placements, each checked with all the previous ones
+# added to the planning scene as (temporary) boxes: a whole pattern against its own future
+# stack. The current scene (placed boxes) is included.
+Placement[] placements
+DetectedBox box
+---
+bool[] feasible
+string[] messages

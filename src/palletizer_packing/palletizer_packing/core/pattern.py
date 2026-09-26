@@ -288,6 +288,52 @@ class Pattern:
     def count(self):
         return len(self.slots)
 
+    def layer_counts(self):
+        return [sum(1 for s in self.slots if s.layer == k) for k in range(1, self.layers + 1)]
+
+
+def _slots(per_layer, H):
+    """[Slot] in placement order from one Layout per layer (1-based layers)."""
+    slots = []
+    for k, lay in enumerate(per_layer, start=1):
+        for r in far_first(lay.rects):
+            slots.append(Slot(len(slots), k, r, (k - 1) * H))
+    return slots
+
+
+def restrict(pattern, remove, rules, physics=None, log=None):
+    """Pattern without the slots in `remove` (indices; e.g. motion-infeasible against the
+    pattern's own stack): each is removed from its layer only, then every box of a higher
+    layer that loses support (overlap < support ratio) is removed too; the whole stack is
+    checked again (static rules + PyBullet)."""
+    if not remove:
+        return pattern
+    H = pattern.box.height
+    per = [[] for _ in range(pattern.layers)]
+    for s in pattern.slots:
+        if s.index not in remove:
+            per[s.layer - 1].append(s.rect)
+    for k in range(1, pattern.layers):
+        below = per[k - 1]
+        per[k] = [r for r in per[k] if sum(_overlap(r, b) for b in below) >=
+                  rules.support_ratio * r.du * r.dv - 1e-9]
+    while per and not per[-1]:
+        per.pop()
+    layouts = [Layout(rs, 'restricted') for rs in per]
+    ok, why = _check_layers(layouts, pattern.box, pattern.spec, rules, physics)
+    if not ok:
+        if log:
+            log(f'restricted pattern unstable ({why}): keeping the layers below it')
+        k_bad = int(why.split()[1].rstrip(':')) if why.startswith('layer ') else 1
+        layouts = layouts[:k_bad - 1]
+    slots = _slots(layouts, H)
+    dropped = pattern.count - len(slots)
+    note = pattern.note + (f'; {dropped} slots dropped (motion check against the stack)'
+                           if dropped else '')
+    stats = dict(pattern.stats, motion_dropped=dropped)
+    return Pattern(pattern.box, pattern.spec, pattern.layer_a, pattern.layer_b, len(layouts),
+                   slots, pattern.optimum, pattern.interlock, note, stats)
+
 
 def layer_ok(state: PalletState, layout: Layout, box: Box, z0, rules: RuleConfig):
     """Static stability of every box of a layer, placed in order on `state` (modified)."""
@@ -388,11 +434,7 @@ def make_pattern(box: Box, spec: PalletSpec, rules: RuleConfig, cfg: PatternConf
         return Pattern(box, spec, Layout([]), Layout([]), 0, [], best, 0.0,
                        'no stable pattern', stats)
     a_lay, b_lay, il = chosen
-    slots = []
-    for k in range(1, layers + 1):
-        lay = a_lay if k % 2 else b_lay
-        for r in far_first(lay.rects):
-            slots.append(Slot(len(slots), k, r, (k - 1) * H))
+    slots = _slots([a_lay if k % 2 else b_lay for k in range(1, layers + 1)], H)
     notes = []
     if even and il < 1e-9:
         notes.append('column stack (no interlocking layer with the same count)')
@@ -408,14 +450,18 @@ def make_pattern(box: Box, spec: PalletSpec, rules: RuleConfig, cfg: PatternConf
 
 
 def _check_stack(a_lay, b_lay, box, layers, spec, rules, physics):
+    return _check_layers([a_lay if k % 2 else b_lay for k in range(1, layers + 1)], box, spec,
+                         rules, physics)
+
+
+def _check_layers(layouts, box, spec, rules, physics):
     """Build the whole pallet in the model: every box statically stable, every layer
     stable in PyBullet (if given)."""
     state = PalletState(spec)
     H = box.height
-    for k in range(1, layers + 1):
-        lay = a_lay if k % 2 else b_lay
+    for k, lay in enumerate(layouts, start=1):
         if not lay.rects:
-            return False, f'layer {k} empty'
+            return False, f'layer {k}: empty'
         before = state.copy()
         ok, why = layer_ok(state, lay, box, (k - 1) * H, rules)
         if not ok:
@@ -443,6 +489,9 @@ class PatternPlanner:
         self.sku = None
         self.validator = None
         self.validator_max = 4
+        # optional check of a whole pattern against its own future stack:
+        # f([Placement]) -> [bool] (the ROS wrapper plugs in /motion/check_placements)
+        self.sequence_validator = None
         self.exclude = []
         self.last_stats = {}
         self.last_reason = ''
@@ -459,8 +508,15 @@ class PatternPlanner:
 
     def start(self, box: Box, spec: PalletSpec):
         self.sku = Box(box.length, box.width, box.height, 0.0)
-        self.pattern = make_pattern(self.sku, spec, self.rules, self.cfg, self.reach,
-                                    self.physics, self.log)
+        pat = make_pattern(self.sku, spec, self.rules, self.cfg, self.reach, self.physics,
+                           self.log)
+        if self.sequence_validator is not None and pat.count:
+            ok = self.sequence_validator([Placement(s.rect.u0, s.rect.v0, s.rect.du, s.rect.dv,
+                                                    s.z0, self.sku.height, s.rect.rotated)
+                                          for s in pat.slots])
+            bad = {i for i, good in enumerate(ok) if not good}
+            pat = restrict(pat, bad, self.rules, self.physics, self.log)
+        self.pattern = pat
         return self.pattern
 
     def _fail(self, reason, msg, t0, **kw):

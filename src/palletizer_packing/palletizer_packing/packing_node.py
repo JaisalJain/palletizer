@@ -26,7 +26,7 @@ from geometry_msgs.msg import Point
 import numpy as np
 from palletizer_interfaces.msg import HeightMap, PackingState
 from palletizer_interfaces.msg import Placement as PlacementMsg
-from palletizer_interfaces.srv import CommitPlacement, PlanPlacement, SetPallet
+from palletizer_interfaces.srv import CheckPlacements, CommitPlacement, PlanPlacement, SetPallet
 import rclpy
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -102,6 +102,8 @@ class PackingNode(Node):
         # complete while a plan request is being served.
         self.check_cli = self.create_client(CommitPlacement, '/motion/check_placement',
                                             callback_group=MutuallyExclusiveCallbackGroup())
+        self.seq_cli = self.create_client(CheckPlacements, '/motion/check_placements',
+                                          callback_group=MutuallyExclusiveCallbackGroup())
         self.create_subscription(HeightMap, '/pallet_perception/height_map', self.on_map,
                                  LATCHED, callback_group=ReentrantCallbackGroup())
         self.marker_pub = self.create_publisher(MarkerArray, '/packing/markers', 10)
@@ -298,6 +300,8 @@ class PackingNode(Node):
                                               ['max_stack_height'])
         spec = PalletSpec.measured(self.spec.length, self.spec.width, self.cell, usable)
         t0 = time.perf_counter()
+        self.planner.sequence_validator = (lambda ps, b=box: self.sequence_feasible(ps, b)) \
+            if self.seq_cli.service_is_ready() else None
         self.planner.start(box, spec)
         pat = self.planner.pattern
         self.get_logger().info(
@@ -306,6 +310,26 @@ class PackingNode(Node):
             f'(usable {usable:.2f} m): {pat.layer_a.count}/{pat.layer_b.count} per layer '
             f'(optimum {pat.optimum}), {pat.layers} layers = {pat.count} boxes; {pat.note} '
             f'[{(time.perf_counter() - t0) * 1000:.0f} ms]')
+
+    def sequence_feasible(self, placements, box):
+        """The whole pattern against its own future stack (motion server, temporary boxes)."""
+        req = CheckPlacements.Request()
+        req.placements = [self.to_msg(p, box) for p in placements]
+        req.box.length, req.box.width, req.box.height = box.length, box.width, box.height
+        fut = self.seq_cli.call_async(req)
+        end = time.monotonic() + 180.0
+        while not fut.done() and time.monotonic() < end:
+            time.sleep(0.01)
+        if not fut.done():
+            self.get_logger().warn('pattern motion check timed out: slots checked one by one')
+            return [True] * len(placements)
+        res = fut.result()
+        for i, (ok, msg) in enumerate(zip(res.feasible, res.messages)):
+            if not ok:
+                p = placements[i]
+                self.get_logger().info(f'pattern slot {i} (u={p.u0:.2f} v={p.v0:.2f} '
+                                       f'z={p.z0:.2f}) infeasible against the stack: {msg}')
+        return list(res.feasible)
 
     def motion_feasible(self, p, box):
         req = CommitPlacement.Request()

@@ -19,7 +19,6 @@ for pkg in ('palletizer_perception', 'palletizer_tools'):
     sys.path.insert(0, os.path.join(SRC, pkg))
 
 from palletizer_perception.pallet_detector import PalletDetector  # noqa: E402
-from palletizer_tools.pallet_frame import PalletFrame  # noqa: E402
 
 CONFIG = os.path.join(SRC, 'palletizer_bringup', 'config', 'cell_config.yaml')
 W_IMG, H_IMG = 800, 600

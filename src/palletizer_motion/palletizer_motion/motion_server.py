@@ -20,7 +20,7 @@ import numpy as np
 import rclpy
 from geometry_msgs.msg import WrenchStamped
 from palletizer_interfaces.action import PickBox, PlaceBox
-from palletizer_interfaces.srv import CommitPlacement, SetPallet, Weigh
+from palletizer_interfaces.srv import CheckPlacements, CommitPlacement, SetPallet, Weigh
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -80,6 +80,8 @@ class MotionServer(Node):
         self.create_service(Trigger, '/motion/park', self.on_park, callback_group=self.cb)
         self.create_service(Trigger, '/motion/drop_held', self.on_drop_held, callback_group=self.cb)
         self.create_service(CommitPlacement, '/motion/check_placement', self.on_check_placement,
+                            callback_group=self.cb)
+        self.create_service(CheckPlacements, '/motion/check_placements', self.on_check_placements,
                             callback_group=self.cb)
         self.create_service(CommitPlacement, '/motion/scene/add_placed', self.on_add_placed,
                             callback_group=self.cb)
@@ -496,6 +498,40 @@ class MotionServer(Node):
         plan = self.place_poses(request.placement, top_in_tcp, yaw_off, request.box.height)
         response.success = not isinstance(plan, str)
         response.message = 'ok' if response.success else plan
+        return response
+
+    def on_check_placements(self, request, response):
+        """A sequence of placements (e.g. a whole pattern), each checked like
+        check_placement with all previous ones in the planning scene as temporary boxes: the
+        offline reachability map knows no boxes, but a tall stack next to the pedestal can
+        block the upper arm for later targets."""
+        if not self.have_joints():
+            response.feasible = [False] * len(request.placements)
+            response.messages = ['no joint states'] * len(request.placements)
+            return response
+        box = request.box
+        ids = []
+        top0 = self.stack_top
+        try:
+            for i, pl in enumerate(request.placements):
+                plan = self.place_poses(pl, np.zeros(3), 0.0, box.height)
+                ok = not isinstance(plan, str)
+                response.feasible.append(ok)
+                response.messages.append('ok' if ok else plan)
+                obj = f'virtual_{i:03d}'
+                center = (pl.top_center.position.x, pl.top_center.position.y,
+                          pl.top_center.position.z - pl.height / 2)
+                self.mv.add_objects([box_object(
+                    obj, 'world', (box.length, box.width, pl.height),
+                    make_pose(center, Rotation.from_euler('z', pl.yaw).as_quat()))])
+                ids.append(obj)
+                self.stack_top = max(self.stack_top, pl.top_center.position.z)
+        finally:
+            if ids:
+                self.mv.remove_objects(ids)
+            self.stack_top = top0
+        n = sum(response.feasible)
+        self.get_logger().info(f'check_placements: {n}/{len(request.placements)} feasible')
         return response
 
     def _place(self, gh):

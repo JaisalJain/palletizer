@@ -27,6 +27,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   srv/MeasurePallet.srv
   srv/SetPallet.srv
   srv/VerifyPlacement.srv
+  srv/CheckPlacements.srv
   action/PickBox.action
   action/PlaceBox.action
   action/PalletExchange.action

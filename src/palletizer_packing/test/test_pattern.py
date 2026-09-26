@@ -229,3 +229,44 @@ def test_motion_validator_applied(catalog):
     pl.validator = lambda p: seen.append(p) or False
     assert pl.plan(PalletState(EUR), b) is None and len(seen) == 1
     assert pl.last_reason == 'NO_FEASIBLE_PLACEMENT'
+
+
+def test_restrict_top_slot(catalog):
+    """A slot infeasible in motion on the top layer is dropped from that layer only."""
+    from palletizer_packing.core.pattern import restrict
+    b = sku(catalog, '400x300x200')
+    p = make_pattern(b, EUR, RuleConfig(), PatternConfig())
+    last_layer_first = next(s.index for s in p.slots if s.layer == p.layers)
+    r = restrict(p, {last_layer_first}, RuleConfig())
+    assert r.count == p.count - 1 and r.layers == p.layers
+    assert r.layer_counts() == p.layer_counts()[:-1] + [p.layer_counts()[-1] - 1]
+
+
+def test_restrict_removes_unsupported_boxes_above(catalog):
+    """Dropping a slot of layer 1 in a column stack removes the boxes stacked on it."""
+    from palletizer_packing.core.pattern import restrict
+    b = sku(catalog, '600x400x300')
+    p = make_pattern(b, EUR, RuleConfig(), PatternConfig())
+    r = restrict(p, {0}, RuleConfig())
+    assert r.layer_counts() == [3, 3, 3]
+    state = PalletState(EUR)
+    from palletizer_packing.core.pallet import Placement
+    for s in r.slots:
+        pl_ = Placement(s.rect.u0, s.rect.v0, s.rect.du, s.rect.dv, s.z0, b.height, s.rect.rotated)
+        assert stability(state, pl_, b, RuleConfig()).ok
+        state.place(pl_, b)
+
+
+def test_sequence_validator_restricts_the_pattern(catalog):
+    """PatternPlanner checks the whole pattern against its own future stack once."""
+    b = sku(catalog, '400x300x200')
+    pl = PatternPlanner(RuleConfig(), PatternConfig(), 0.010)
+    calls = []
+
+    def seq(placements):
+        calls.append(len(placements))
+        return [not (p.z0 > 0.75 and p.u0 < 0.01 and p.v0 > 0.3) for p in placements]
+    pl.sequence_validator = seq
+    pl.start(b, EUR)
+    assert calls == [40]
+    assert pl.pattern.count == 39 and 'motion check' in pl.pattern.note
