@@ -76,8 +76,9 @@ handshake. Results and acceptance numbers: `docs/RESULTS.md`.
 - Pallet camera (0, −0.60, 2.80) looking down, image x along +x, 800×600 @ 5 Hz, hfov 0.9
   (~3.2 mm/pixel at the deck), σ = 2 mm; mast at (0, −1.55), outside the lane.
 - `robot.home` [−π/2, −π/2, π/2, −π/2, −π/2, 0] is only the IK seed (pan rotated to each target);
-  `robot.park` (TCP at (0.35, 0.08, 1.65)) is the start / park pose, outside both camera views and
-  high enough for a carried box to clear a full pallet leaving the station.
+  `robot.park` (TCP at (0.35, 0.08, 1.65)) is the start / park pose, outside both camera views.
+  With a box held (pallet closed after the pick) "park" goes to `robot.hold_xyz` (0.8, 0.3, 1.5)
+  instead: at the folded park pose a big box hits the forearm.
 
 ## Data flow (mode single_sku / mixed)
 ```
@@ -172,10 +173,12 @@ pallet_perception: /pallet_perception/height_map --> packing_node; stack_events 
   MeasurePallet → SetPallet) → loop{MorePallets → Cycle}. Cycle: WaitBoxReady → DetectBox (Park +
   3 retries, else reject) → pre-check (fails on a started pallet → ClosePallet(reason) + retry on
   the new pallet; else reject) → Parallel[Pick (retry once / reject) ‖ VerifyPlacement(prev) +
-  PlanPlacement] → ResumeConveyor → recheck with measured mass (else ClosePallet while holding) →
+  PlanPlacement] → ResumeConveyor → recheck with measured mass (else ClosePallet while holding,
+  arm at the hold pose) →
   PlaceBox + VerifyRelease (re-plan excluding the target; on a started pallet close it and place
   on the next; else reject) → Commit → ReportCycle → PalletFull? (PATTERN_COMPLETE / OPERATOR) →
   ClosePallet. ClosePallet = Park, VerifyPlacement, FinishPallet (FULL + report), NewPallet.
+  Each cycle first checks `Holding` (/suction/grasped): a leftover held box is rejected.
   Groot2 on port 1667.
 
 ## Build / run / test
@@ -200,9 +203,10 @@ sku_runs`, `pick_place_test`, `benchmark --prefix v2bench`. `sim_ctl.sh start|st
 - The copied UR `ompl_planning.yaml` had no group entry → added `manipulator` (else OMPL aborts, −27).
 - Never `pkill -f <pattern>` from a shell whose own command line contains the pattern (it kills
   itself); use `pkill -f "[p]attern"` or process-group kills (`sim_ctl.sh`).
-- Real-time factor falls with the number of stacked boxes (one DART contact island: RTF ≈ 0.9
-  empty, ≈ 0.5 at 48, ≈ 0.25 at 80 boxes; bullet collision detector, PGS solver and max_contacts
-  did not help). Sim-time metrics (picks/min) are unaffected; wall time is.
+- Real-time factor falls with the number of stacked boxes (DART solves each contact island as one
+  LCP: column stacks ≈ 0.9 empty, 0.5 at 48, 0.25 at 80 boxes; an interlocked stack is ONE island:
+  0.1 at 28, 0.04 at 29 bridging boxes). Bullet collision detector, PGS solver and max_contacts
+  did not help. Sim-time metrics (picks/min) are unaffected; wall time is.
 - Timestamps: F/T weighing averages by message stamps (sim time); arrival times made a window
   empty when the motion server's executor threads were busy.
 - Stack monitoring must not see a new box as a neighbour's shift: the orchestrator's cycle report
@@ -211,6 +215,9 @@ sku_runs`, `pick_place_test`, `benchmark --prefix v2bench`. `sim_ctl.sh start|st
   small SKUs and depends on the delivered pallet pose (reported per pallet). Near-row stacks
   above ~0.8 m (world) next to the pedestal block the upper arm for some far targets; the
   offline map cannot know (no boxes) → the pattern's motion check drops those top-layer slots.
+- Timeouts that wait for sim-time events (fresh frames, suction confirm, settles, F/T windows,
+  pallet-camera views, the packing map wait) use node time with a wall cap
+  (`palletizer_tools/sim_time.py`): with big interlocked stacks the RTF falls to ~0.03–0.1.
 - Pilz LIN at 0.6 m/s sometimes exceeds a joint limit near wrist reconfigurations → the same line
   is re-planned at 0.25, then 0.1 (arm nearly stretched at far top corners;
   `motion.lin_fallback_scaling`).

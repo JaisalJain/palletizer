@@ -9,7 +9,24 @@ v2 (measured pallets, single-SKU patterns, pallet exchange) comes first; the v1 
 ## Acceptance summary (v2 "DONE" criteria)
 
 <!-- V2SUMMARY:BEGIN -->
-(filled in at the end of the v2 runs)
+
+| # | Criterion | Result | Evidence |
+|---|---|---|---|
+| 1 | Clean build; all v0/v1 tests and pytest pass | from-scratch build without warnings (3 gz plugins link the vendored gz-sim); sim suite 7/7 (build, no-hardcoding, controllers, camera, conveyor, suction, pallet mover); pytest packing 54/54, perception unit 9/9; v1 box perception eval 68/68 (dims max 0.31 mm), touching boxes 4/4, pick & place 20/20 (with pallet exchanges) | `run_all.sh`, pytest, [v2 test changes](#v2-test-changes) |
+| 2 | No-hardcoding check | code check `test_no_hardcoding.py` (decision code loads the robot view of the config, which has no box / pallet sizes; no plant-only section is read; the C++ orchestrator reads no geometry) 23/23; runtime: a 347×253×219 carton on a 1140×760×150 pallet (neither configured) → measured 346.9×253.0×219.0 and 1137.1×760.2×150.0 mm, 36/36 pattern boxes placed | [unknown run](#sku-change-unknown-sku--pallet-interlock-priority) |
+| 3 | Milestone B thresholds | pallet dims ≤ 3.1 mm, pose ≤ 0.5 mm / 0.17°, height map ≤ 4.2 mm on occupied cells, camera vs GT placement ≤ 0.67 mm, shoved box detected (39.9 / 29.9 mm for 40 / 30 mm), none for 10 mm, no false events | [Milestone B](#milestone-b--pallet-perception) |
+| 4 | Every catalog SKU: a full pallet unattended | 9/9 SKUs: boxes placed = pattern count, PATTERN_COMPLETE, 0 collapses (GT), 0 stack events, exchange completed and the next pallet's first box placed; SKU change run closed with SKU_CHANGE after 10 boxes and continued on a new pallet | [Single-SKU pallets](#single-sku-pallets-acceptance-runs) |
+| 5 | Picks/min ≥ 4 in single_sku mode | 4.26–4.89 per pallet (incl. the first box's arrival), 4.55–5.04 steady; v1 1.77–2.12 | [Milestone F](#milestone-f--speed) |
+| 6 | RViz config with both debug image panels + screenshot | `palletizer_gazebo/rviz/cell.rviz` (conveyor and pallet debug images docked next to the 3D view, 2D status overlay, markers); `docs/rviz.png` | README |
+| 7 | RESULTS single-SKU table next to the v1 mixed results; docs, commits | this file; v2 mixed-mode regression next to the v1 benchmark; CLAUDE.md, README.md | git history |
+
+The catalog runs were made with the code at commit `0cec7b2` (300×200×200, and 450×350 /
+520×320 / 380×280 with the second LIN slow-down level), the SKU-change run with the same code,
+the unknown-SKU run with the sim-time waits (`69c8ccc`), the mixed-mode regression and all tests
+with the final code. The later commits changed only failure paths (second LIN slow-down level,
+sim-time waits, hold pose when a pallet closes with a box on the cup); of these, the completed
+catalog runs needed only the LIN slow-down.
+
 <!-- V2SUMMARY:END -->
 
 ## Milestone B — Pallet perception
@@ -32,24 +49,26 @@ raw data `results/pallet_perception_eval.json`). Pallet camera 800×600 at 2.8 m
 | Metric | Result | Threshold | |
 |---|---|---|---|
 | Pallets measured | 9/9 | all | PASS |
-| Pallet dims error, max (u / v) | 3.15 / 1.09 mm | ≤ 10 mm | PASS |
-| Pallet position error, max | 0.48 mm | ≤ 10 mm | PASS |
-| Pallet yaw error, max | 0.20° | ≤ 1° | PASS |
+| Pallet dims error, max (u / v) | 3.10 / 0.36 mm | ≤ 10 mm | PASS |
+| Pallet position error, max | 0.47 mm | ≤ 10 mm | PASS |
+| Pallet yaw error, max | 0.17° | ≤ 1° | PASS |
 | Deck height error, max | 0.01 mm | | |
 | Placements measured | 9/9 | all | |
-| Camera vs ground-truth placement, max / mean (xy) | 0.70 / 0.25 mm | ≤ 5 mm | PASS |
-| … z / yaw, max | 0.02 mm / 0.39° | | |
-| Height map vs ground truth, occupied interior cells (6275), max / mean | 4.91 / 1.71 mm | ≤ 10 mm | PASS |
-| … all occupied cells incl. box-edge cells within 10 mm | 99.5 % | (edge cells straddle two heights) | |
-| Occupied cells not observed (occluded) | 8.5 % | (the record fills them) | |
+| Camera vs ground-truth placement, max / mean (xy) | 0.67 / 0.31 mm | ≤ 5 mm | PASS |
+| … z / yaw, max | 0.03 mm / 0.44° | | |
+| Height map vs ground truth, occupied interior cells (6303), max / mean | 4.19 / 1.70 mm | ≤ 10 mm | PASS |
+| … all occupied cells incl. box-edge cells within 10 mm | 99.2 % | (edge cells straddle two heights) | |
+| Occupied cells not observed (occluded) | 8.3 % | (the record fills them) | |
 | Stack events while nothing moves | 0 | 0 | PASS |
 | Shove 10 mm (below the 20 mm threshold) | no event | no event | PASS |
-| Shove 40 mm / 30 mm | SHIFT, estimated 39.7 / 30.1 mm, attributed to the shoved box, none elsewhere | event | PASS |
+| Shove 40 mm / 30 mm | SHIFT, estimated 39.9 / 29.9 mm, attributed to the shoved box, none elsewhere | event | PASS |
 
-Per pallet type (dims error u / v, centre, yaw): HALF ≤ 1.3 / 0.2 mm, ≤ 0.1 mm, 0.00°;
-1000×800 ≤ 3.2 / 1.1 mm, ≤ 0.5 mm, ≤ 0.2°; EUR ≤ 2.9 / 0.3 mm, ≤ 0.4 mm, 0.00°. The length
-along u is measured 1–3 mm short (deck-board end faces seen obliquely are removed by the
-flatness test); well inside the threshold.
+Per pallet type (dims error u / v, centre, yaw, max of 3): HALF 1.4 / 0.2 mm, 0.1 mm, 0.00°;
+1000×800 3.1 / 0.4 mm, 0.4 mm, 0.17°; EUR 3.1 / 0.3 mm, 0.5 mm, 0.10°. The length along u is
+measured 1–3 mm short (deck-board end faces seen obliquely are removed by the flatness test);
+well inside the threshold. In the robot's own runs, every placement was also checked by the
+camera and compared with ground truth by the metrics logger: max 0.08–0.70 mm per pallet
+(tables below), and the 20-box pick & place test 18/18 within 0.66 mm.
 
 **How it works** (`pallet_detector.py`, all measured, no pallet in the config):
 - *Deck*: the highest large flat height plateau in the station area. A per-pixel flatness
@@ -166,13 +185,45 @@ One pallet per SKU on EUR (fresh headless simulation each), then the exchange an
 | 520x320x250 | 520 x 320 x 250 (520x320x250) | 1196 x 800 | 4 | 4/4 | 4 | 15 | 15 | 56.7 | 4.62 · 4.85 | PATTERN_COMPLETE | started | 0 | 0 | 0.45 | 0.37 |
 | 380x280x220 | 380 x 280 x 220 (380x280x220) | 1196 x 800 | 8 | 8/8 | 4 | 31 | 31 | 68.9 | 4.81 · 4.96 | PATTERN_COMPLETE | started | 0 | 0 | 0.50 | 0.51 |
 | skuchange | 394 x 294 x 200 | 1196 x 800 | 8 | 7/7 | 5 | 32 | 10 | 22.0 | 4.06 · 4.53 | SKU_CHANGE | started | 0 | 0 | 0.49 | 0.84 |
+| unknown | 347 x 253 x 219 | 1137 x 760 | 8 | 8/8 | 5 | 36 | 36 | 69.6 | 4.78 · 4.98 | PATTERN_COMPLETE | started | 0 | 0 | 0.54 | 0.18 |
 
 <!-- SKU_RUNS:END -->
 
 ### SKU change, unknown SKU / pallet, interlock priority
 
 <!-- EXTRA_RUNS:BEGIN -->
-(filled in from the runs)
+
+**SKU change** (`sku_runs --name skuchange --order "400x300x200:10, 600x400x300:4"`; the robot
+is not told): 10 cartons of 400×300×200 → pattern 7/7 × 5 = 32 (as in the catalog run); the
+11th box measures 594×394×300 → pre-check `SKU_CHANGE` (box 594 x 394 x 300 mm is not SKU
+394 x 294 x 200 mm) → **pallet 0 FULL (SKU_CHANGE) with 10/32 boxes** → exchange → new pallet
+measured (1197.7 × 800.4 mm) → the same box starts the new pallet with its own pattern (4/4 × 3
+= 12) and is placed. 11/11 boxes placed, 0 collapses, 0 stack events, camera vs ground truth
+≤ 0.49 mm, 4.06 picks/min (steady 4.53).
+
+**No-hardcoding run** (`sku_runs --name unknown --sku 347x253x219 --pallets 1140x760x150`):
+a carton and a pallet type that appear nowhere in the config (not in the SKU catalog, not in
+the pallet types; deck 150 mm instead of 144). The robot measured the pallet as
+1137.1 × 760.2 mm, deck 150.0 mm, centre (0.0005, −0.5821), yaw −1.06° (true 1140 × 760 × 150,
+(0.000, −0.582), −1.06°: 2.9 / 0.2 mm, 0.0 mm, 0.00°) and the carton as 346.9 × 253.0 × 219.0 mm
+(true 347 × 253 × 219). Usable height for this pallet and carton 1.15 m → 5 layers; best layer
+8 boxes, **interlocked A/B (62 % of the boxes bridge)**; 4 slots dropped by the stack-aware
+motion check → pattern 36. **36/36 placed, PATTERN_COMPLETE**, exchange to another 1140×760
+pallet, first box placed on it. 0 collapses, 0 stack events, camera vs ground truth ≤ 0.54 mm,
+4.78 picks/min (steady 4.98). Interlocked stacks are one contact island for the physics
+engine: RTF fell to ~0.1 near the top (0.18 over the pallet).
+
+**Pattern priority `interlock`** (`--sku 400x300x200 --extra pattern_priority:=interlock`):
+on the same pallet the planner picks
+layers A = 7 (the unreachable slot) and B = 8 interlocking with it (50 % bridging), 3 slots
+dropped by the motion check → **34 boxes, 2 more than priority count (7/7 column stack, 32)**:
+here the unreachable slot costs only layer A. The run was **stopped at 29/34** (0 collapses,
+0 stack events, placement error ≤ 0.13 mm, camera vs ground truth ≤ 0.54 mm): with 29 boxes
+in one interlocked contact island the simulation ran at RTF 0.04 (≈ 10 min wall per box).
+Raw data in `results/partial/` (log in `results/v2_logs.tar.xz`). The completed interlocked pallets are the unknown-SKU run
+above (62 % bridging, 36/36) and the catalog SKUs 500×300, 450×350, 520×320 (interlocked with
+priority count, because a same-count interlocking layer exists).
+
 <!-- EXTRA_RUNS:END -->
 
 ## Milestone D — Pallet-full decision and exchange handshake
@@ -207,7 +258,7 @@ One pallet per SKU on EUR (fresh headless simulation each), then the exchange an
 
 Picks per minute in sim time over each pallet (from the pallet's measurement to its last
 placement, including the first box's trip along the conveyor), and steady state (first to last
-placement): **4.26–4.81 picks/min per pallet, 4.55–5.02 steady**, all single-SKU pallets above
+placement): **4.26–4.89 picks/min per pallet, 4.55–5.04 steady**, all single-SKU pallets above
 (v1 mixed: 1.77 heuristic / 2.12 naive). Collapses: 0 (ground truth) and 0 stack events
 (perception) on every pallet.
 
@@ -233,6 +284,44 @@ detector, the PGS solver and max_contacts 4 gave no gain (PGS was 3× slower), s
 defaults at a requested RTF of 1.0 (> 1 is not reachable on this machine). The measured RTF per
 pallet is in the table.
 
+## Mixed mode (v1 planners) under v2
+
+`ros2 run palletizer_orchestrator benchmark --planners naive heuristic --seeds 1 2 3 4 --prefix
+v2bench`: the v1 mode still works on top of everything v2 changed (measured pallet delivered
+with pose noise, perceived height map merged into the model, exchange handshake, faster
+motion). One pallet per (planner, seed), fresh headless sim.
+
+<!-- V2BENCH:BEGIN -->
+
+Real-time factor: 1.0. One pallet per (planner, seed) in a fresh headless simulation; the same seed gives both planners the same box sequence. Mean ± std over pallets. Raw data: `results/v2bench_*`.
+
+| Planner | Pallets | Seeds | Fill % | Boxes / pallet | Max height [m] | Collapses | Lost boxes | Rejected | Picks / min | Planning time [ms] | Cycle time [s] | Place err [mm] | Mass err [kg] |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| naive | 4 | 1 2 3 4 | 21.8 ± 5.5 | 4.0 ± 1.4 | 0.57 ± 0.19 | 0 | 0 | 0 | 3.86 ± 0.17 | 231 ± 133 | 13.1 ± 0.5 | 0.03 ± 0.02 | 0.005 ± 0.002 |
+| heuristic | 4 | 1 2 3 4 | 21.8 ± 5.5 | 4.0 ± 1.4 | 0.52 ± 0.17 | 0 | 0 | 0 | 3.23 ± 0.11 | 1594 ± 951 | 15.4 ± 2.2 | 0.04 ± 0.03 | 0.005 ± 0.002 |
+
+Paired per seed (heuristic − naive, fill %): mean -0.00, heuristic better on 0, equal on 4, worse on 0 of 4 seeds.
+
+| Seed | naive fill % (boxes) | heuristic fill % (boxes) |
+|---|---|---|
+| 1 | 17.3 (4) | 17.3 (4) |
+| 2 | 20.4 (4) | 20.4 (4) |
+| 3 | 31.1 (6) | 31.1 (6) |
+| 4 | 18.6 (2) | 18.6 (2) |
+
+<!-- V2BENCH:END -->
+
+Same seeds in v1 (24-seed benchmark below): naive 17.2 (4), 14.4 (3), 34.8 (7), 17.7 (2);
+heuristic 17.2 (4), 19.3 (4), 29.6 (6), 17.7 (2). The pallets now differ slightly because the
+pallet is delivered at a random pose (the reachability and the usable height depend on it:
+1.00–1.05 m here) and the planners see the perceived stack; on these 4 seeds both planners
+tie (they tie on half of all seeds in v1 too). The v1 24-seed comparison remains the planner
+evidence. **0 collapses, 0 lost boxes, 0 rejects in all 8 pallets; 3.86 / 3.23 picks/min
+(v1: 2.12 / 1.77)**. Heuristic seed 2 exercised the close-while-holding path (the measured mass
+broke the mass rule for every position after weighing: the pallet was closed with the box on
+the cup, the arm waited at the hold pose during the exchange, and the box went onto the new
+pallet).
+
 ## v2 test changes
 
 v0 / v1 tests still pass; the ones that relied on the old behaviour were updated, none deleted:
@@ -245,7 +334,11 @@ v0 / v1 tests still pass; the ones that relied on the old behaviour were updated
 - `pick_place_test`: the "pallet swap" is a pallet exchange + measurement (the old
   `/sim/clear_pallet` forklift is gone); placements are also verified by the pallet camera
   during the next pick, like the BT, and the camera error is compared with ground truth.
-- `eval_perception`: the mixed-box distribution moved to `spawner.mixed`.
+- `eval_perception`: the mixed-box distribution moved to `spawner.mixed`. Re-run on v2: 68/68,
+  dims mean 0.03 / max 0.31 mm, grasp centre 0.03 mm, yaw 0.009° (same as v1); touching boxes
+  4/4. `results/perception_eval.csv` and `results/pick_place_test.csv` now hold these v2 re-runs
+  (pick & place 20/20, placement max 0.09 mm, yaw max 0.07°, neighbours 0.00 mm, 3 pallet
+  exchanges, camera vs ground truth ≤ 0.66 mm).
 - `run_all.sh`: + `test_no_hardcoding` (no sim) and `test_pallet_mover`.
 - `palletizer_perception/test/conftest.py`: only the sim script is excluded from collection, so
   the new synthetic-depth unit tests run with plain pytest.

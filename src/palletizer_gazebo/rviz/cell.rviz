@@ -1,9 +1,6 @@
-Panels:
-  - Class: rviz_common/Displays
-    Name: Displays
-    Property Tree Widget:
-      Expanded: ~
-    Help Height: 0
+# Layout: the two perception debug images docked on the left of the 3D view (the Displays
+# panel is available under Panels > Add New Panel).
+Panels: []
 Visualization Manager:
   Class: ""
   Displays:
@@ -123,16 +120,16 @@ Visualization Manager:
     Current:
       Class: rviz_default_plugins/Orbit
       Name: Current View
-      Distance: 4.6
-      Focal Point: {X: 0.0, Y: 0.0, Z: 0.6}
-      Pitch: 0.62
-      Yaw: 3.6
+      Distance: 3.6
+      Focal Point: {X: 0.0, Y: -0.15, Z: 0.55}
+      Pitch: 0.55
+      Yaw: 3.9
     Saved: ~
 Window Geometry:
-  Width: 1600
-  Height: 900
-  Displays:
-    collapsed: true
+  Width: 1800
+  Height: 1000
+  # dock layout (Qt saveState): both image panels 640 px wide, stacked on the left
+  QMainWindow State: 000000ff00000000fd000000010000000000000280000003e8fc0200000002fb0000002000500061006c006c0065007400500065007200630065007000740069006f006e0100000000000001f10000003200fffffffb000000240043006f006e007600650079006f007200500065007200630065007000740069006f006e01000001f7000001f10000003200ffffff00000482000003e800000004000000040000000800000008fc00000000
   ConveyorPerception:
     collapsed: false
   PalletPerception:

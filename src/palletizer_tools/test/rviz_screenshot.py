@@ -34,13 +34,19 @@ def read_xwd(data):
         hdr = struct.unpack('<25I', data[:100])
     header_size, fmt, width, height = hdr[0], hdr[2], hdr[4], hdr[5]
     byte_order, bpp, bpl = hdr[7], hdr[11], hdr[12]
-    red_mask, green_mask, blue_mask = hdr[15], hdr[16], hdr[17]
+    red_mask, green_mask, blue_mask = hdr[14], hdr[15], hdr[16]
     ncolors = hdr[19]
     off = header_size + ncolors * 12
-    if fmt != 2 or bpp != 32:
+    if fmt != 2 or bpp not in (24, 32):
         raise RuntimeError(f'unsupported XWD format {fmt} / {bpp} bpp')
-    px = np.frombuffer(data[off:off + bpl * height], dtype='<u4' if byte_order == 0 else '>u4')
-    px = px.reshape(height, bpl // 4)[:, :width]
+    raw = np.frombuffer(data[off:off + bpl * height], dtype=np.uint8).reshape(height, bpl)
+    nb = bpp // 8
+    b = raw[:, :width * nb].reshape(height, width, nb).astype(np.uint32)
+    if byte_order != 0:                                   # MSB first
+        b = b[..., ::-1]
+    px = b[..., 0] | (b[..., 1] << 8) | (b[..., 2] << 16)
+    if nb == 4:
+        px |= b[..., 3] << 24
 
     def chan(mask):
         shift = (mask & -mask).bit_length() - 1
@@ -51,8 +57,7 @@ def read_xwd(data):
 def main():
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/palletizer_ws/docs/rviz.png')
     win = find_window()
-    subprocess.run(['xdotool', 'windowactivate', '--sync', win], check=False)
-    subprocess.run(['xdotool', 'windowsize', '--sync', win, '1800', '1000'], check=False)
+    subprocess.run(['xdotool', 'windowsize', win, '1800', '1000'], check=False)
     time.sleep(3.0)
     data = subprocess.run(['xwd', '-silent', '-id', win], capture_output=True, check=True).stdout
     img = read_xwd(data)
