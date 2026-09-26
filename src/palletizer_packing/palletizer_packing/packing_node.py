@@ -11,12 +11,15 @@ The pallet model is updated from the *commanded* placement (commit), never from 
 import json
 import math
 import os
+import time
 
 from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import Point
 from palletizer_interfaces.msg import Placement as PlacementMsg
 from palletizer_interfaces.srv import CommitPlacement, PlanPlacement
 import rclpy
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from std_msgs.msg import ColorRGBA, String
 from std_srvs.srv import Trigger
@@ -52,9 +55,18 @@ class PackingNode(Node):
         self.state = PalletState(self.spec)
         self.ghost = None
 
-        self.create_service(PlanPlacement, '/packing/plan_placement', self.on_plan)
-        self.create_service(CommitPlacement, '/packing/commit', self.on_commit)
-        self.create_service(Trigger, '/packing/reset', self.on_reset)
+        srv_group = MutuallyExclusiveCallbackGroup()
+        self.create_service(PlanPlacement, '/packing/plan_placement', self.on_plan,
+                            callback_group=srv_group)
+        self.create_service(CommitPlacement, '/packing/commit', self.on_commit,
+                            callback_group=srv_group)
+        self.create_service(Trigger, '/packing/reset', self.on_reset, callback_group=srv_group)
+        # Motion feasibility in the current scene (motion server); own group so the call can
+        # complete while a plan request is being served.
+        self.check_cli = self.create_client(CommitPlacement, '/motion/check_placement',
+                                            callback_group=MutuallyExclusiveCallbackGroup())
+        self.planner.validator_max = int(self.cell['packing']['motion_check_max'])
+        self.current_box = None
         self.marker_pub = self.create_publisher(MarkerArray, '/packing/markers', 10)
         self.state_pub = self.create_publisher(String, '/packing/state', 10)
         self.create_timer(1.0, self.publish_markers)
@@ -101,6 +113,8 @@ class PackingNode(Node):
         box = self.box_from(req.box, req.mass)
         exclude = [self.from_msg(m, box) for m in req.exclude]
         self.planner.exclude = exclude
+        self.planner.validator = (lambda p, b=box: self.motion_feasible(p, b)) \
+            if self.check_cli.service_is_ready() else None
         p = self.planner.plan(self.state, box, check_only=req.check_only)
         self.planner.exclude = []
         stats = self.planner.last_stats
@@ -119,6 +133,21 @@ class PackingNode(Node):
             self.ghost = (p, box)
             self.get_logger().info(f'plan: {res.message}')
         return res
+
+    def motion_feasible(self, p, box):
+        req = CommitPlacement.Request()
+        req.placement = self.to_msg(p, box)
+        req.box.length, req.box.width, req.box.height = box.length, box.width, box.height
+        fut = self.check_cli.call_async(req)
+        end = time.monotonic() + 10.0
+        while not fut.done() and time.monotonic() < end:
+            time.sleep(0.002)
+        if not fut.done():
+            return False
+        if not fut.result().success:
+            self.get_logger().info(f'motion check rejected u={p.u0:.2f} v={p.v0:.2f} '
+                                   f'z={p.z0:.2f}: {fut.result().message}')
+        return fut.result().success
 
     def on_commit(self, req, res):
         box = self.box_from(req.box, req.mass)
@@ -189,7 +218,9 @@ class PackingNode(Node):
 
 def main():
     rclpy.init()
-    rclpy.spin(PackingNode())
+    ex = MultiThreadedExecutor()
+    ex.add_node(PackingNode())
+    ex.spin()
 
 
 if __name__ == '__main__':

@@ -76,6 +76,8 @@ class MotionServer(Node):
         self.create_service(Weigh, '/suction/weigh', self.on_weigh, callback_group=self.cb)
         self.create_service(Trigger, '/motion/park', self.on_park, callback_group=self.cb)
         self.create_service(Trigger, '/motion/drop_held', self.on_drop_held, callback_group=self.cb)
+        self.create_service(CommitPlacement, '/motion/check_placement', self.on_check_placement,
+                            callback_group=self.cb)
         self.create_service(CommitPlacement, '/motion/scene/add_placed', self.on_add_placed,
                             callback_group=self.cb)
         self.create_service(Trigger, '/motion/scene/clear_placed', self.on_clear_placed,
@@ -399,25 +401,25 @@ class MotionServer(Node):
         (goal_handle.succeed if res.success else goal_handle.abort)()
         return res
 
-    def _place(self, gh):
-        pl = gh.request.placement
-        res = PlaceBox.Result()
+    def place_poses(self, pl, top_in_tcp, yaw_offset, box_height):
+        """Joint/TCP poses for placing at `pl` with the current scene, or an error string.
+
+        Returns (yaw, q_pre, q_above, above_tcp, pre_tcp, release_tcp). Every pose must have
+        IK and be collision-free against the current planning scene (placed stacks, and the
+        carried box when one is attached); the LIN from above down to pre-place is sampled
+        too. Used by the place action and by /motion/check_placement (packing validator)."""
         m = self.m
-        if self.held is None or not self.grasped:
-            return self._fail(res, 'EXEC_FAILED', 'not holding a box')
         target_top = np.array([pl.top_center.position.x, pl.top_center.position.y,
                                pl.top_center.position.z])
-        yaws = [pl.yaw + self.held['yaw_offset'] + k * math.pi for k in range(2)]
 
         def tcp_for(top_xyz, yaw):
             R = Rotation.from_euler('z', yaw) * Rotation.from_euler('x', math.pi)
-            return top_xyz - R.apply(self.held['top_in_tcp'])
+            return top_xyz - R.apply(top_in_tcp)
 
         release_top = target_top + [0, 0, m['release_gap']]
         pre_top = target_top + [0, 0, m['pre_place_height']]
-        # choose the yaw with the smaller wrist rotation, using the pre-place pose
         best = None
-        for yaw in yaws:
+        for yaw in [pl.yaw + yaw_offset + k * math.pi for k in range(2)]:
             q, _ = self.solve(tcp_for(pre_top, yaw), [yaw], ref=self.joints)
             if q is None:
                 continue
@@ -425,28 +427,57 @@ class MotionServer(Node):
             if best is None or cost < best[0]:
                 best = (cost, q, yaw)
         if best is None:
-            return self._fail(res, 'NO_IK', f'no IK for pre-place {pre_top.round(3)}')
+            return f'no IK for pre-place {pre_top.round(3)}'
         _, q_pre, yaw = best
+        pre_tcp, release_tcp = tcp_for(pre_top, yaw), tcp_for(release_top, yaw)
+        q_rel, _ = self.solve(release_tcp, [yaw], ref=q_pre, seed=q_pre)
+        if q_rel is None:
+            return f'no IK for release {release_tcp.round(3)}'
+        if not (self.mv.state_valid(self.route_pan(q_pre)) and
+                self.mv.state_valid(self.route_pan(q_rel))):
+            return f'pre-place/release pose in collision {pre_tcp.round(3)}'
+        z = max(self.hub_z(box_height), pre_tcp[2])
+        while z >= pre_tcp[2] - 1e-6:
+            cand = np.array([pre_tcp[0], pre_tcp[1], z])
+            q_above, _ = self.solve(cand, [yaw], ref=self.joints, seed=q_pre)
+            # the reachability map was built on an empty pallet: e.g. reaching high over the
+            # far side can put the upper arm into a tall stack next to the pedestal
+            ok = q_above is not None and self.mv.state_valid(self.route_pan(q_above))
+            if ok and z > pre_tcp[2] + 0.1:            # sample the vertical LIN down
+                mid = np.array([pre_tcp[0], pre_tcp[1], (z + pre_tcp[2]) / 2])
+                q_mid, _ = self.solve(mid, [yaw], ref=q_above, seed=q_above)
+                ok = q_mid is not None and self.mv.state_valid(self.route_pan(q_mid))
+            if ok:
+                return yaw, q_pre, q_above, cand, pre_tcp, release_tcp
+            z -= 0.05
+        return f'no collision-free pose above target {pre_tcp.round(3)}'
+
+    def on_check_placement(self, request, response):
+        """Motion feasibility of a candidate placement in the current scene."""
+        if self.held is not None:
+            top_in_tcp, yaw_off = self.held['top_in_tcp'], self.held['yaw_offset']
+        else:
+            top_in_tcp, yaw_off = np.zeros(3), 0.0
+        plan = self.place_poses(request.placement, top_in_tcp, yaw_off, request.box.height)
+        response.success = not isinstance(plan, str)
+        response.message = 'ok' if response.success else plan
+        return response
+
+    def _place(self, gh):
+        pl = gh.request.placement
+        res = PlaceBox.Result()
+        m = self.m
+        if self.held is None or not self.grasped:
+            return self._fail(res, 'EXEC_FAILED', 'not holding a box')
+        plan = self.place_poses(pl, self.held['top_in_tcp'], self.held['yaw_offset'],
+                                self.held['box'].height)
+        if isinstance(plan, str):
+            return self._fail(res, 'NO_IK', plan)
+        yaw, q_pre, q_above, above, pre_tcp, release_tcp = plan
 
         # Travel at hub height to directly above the target (clears every stack), then go
         # straight down: joint-space moves near the stacks could sweep the box sideways.
         self.feedback(gh, PlaceBox, 'transit above target', 0.1)
-        z_top = self.hub_z(self.held['box'].height)
-        above = None
-        pre_tcp = tcp_for(pre_top, yaw)
-        z = max(z_top, pre_tcp[2])
-        while z >= pre_tcp[2] - 1e-6:
-            cand = np.array([pre_tcp[0], pre_tcp[1], z])
-            q_above, _ = self.solve(cand, [yaw], ref=self.joints, seed=q_pre)
-            # the pose must also be collision-free with the current stacks (the offline
-            # reachability map was built on an empty pallet): e.g. reaching high over the far
-            # side can put the upper arm into a tall stack next to the pedestal
-            if q_above is not None and self.mv.state_valid(self.route_pan(q_above)):
-                above = cand
-                break
-            z -= 0.05
-        if above is None:
-            return self._fail(res, 'NO_IK', f'no collision-free pose above target {pre_tcp.round(3)}')
         ok, msg = self.ptp(self.route_pan(q_above))
         if not ok:
             return self._fail(res, 'PLAN_FAILED', f'above target: {msg}')
@@ -456,9 +487,9 @@ class MotionServer(Node):
             if not ok:
                 return self._fail(res, 'EXEC_FAILED', f'down to pre-place: {msg}')
         self.feedback(gh, PlaceBox, 'descend', 0.4)
-        ok, msg = self.descend(tcp_for(release_top, yaw), yaw)
+        ok, msg = self.descend(release_tcp, yaw)
         if not ok:
-            self.lin(tcp_for(pre_top, yaw), yaw)
+            self.lin(pre_tcp, yaw)
             return self._fail(res, 'EXEC_FAILED', f'descend: {msg}')
 
         self.feedback(gh, PlaceBox, 'release', 0.6)

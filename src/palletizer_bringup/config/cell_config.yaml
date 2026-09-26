@@ -166,6 +166,7 @@ packing:
   support_ratio: 0.75              # min supported fraction of the base area
   support_tol: 0.005               # cell supports the box if within this of the resting height
   mass_ratio: 1.5                  # no box heavier than this x any box directly under it
+  motion_check_max: 12             # max motion-feasibility checks (current scene) per plan
   reach_over_clearance: 0.10       # stacks between the robot and the target must be at least
                                    # this much below the target resting height + pre_place_height
   heuristic:                       # score = lower is better (tuned offline on seeds 100-159,

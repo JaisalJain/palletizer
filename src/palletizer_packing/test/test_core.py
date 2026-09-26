@@ -292,3 +292,24 @@ def test_gym_env(cell, spec, rules):
     bad = env.action_space.n - 1                     # far corner, rotated: out of bounds
     obs2, r, *_ = env.step(bad)
     assert r == env.invalid_penalty
+
+
+@pytest.mark.parametrize('planner_cls', [NaivePlanner, HeuristicPlanner])
+def test_motion_validator_hook(spec, rules, cell, planner_cls):
+    """A motion validator (the ROS wrapper plugs in the motion server) skips candidates it
+    rejects; a validator that rejects everything means 'no feasible placement'."""
+    cfg = PlannerConfig.from_config(cell)
+    cfg.physics_top_k = 0
+    pl = planner_cls(rules, cfg, None, None)
+    s = PalletState(spec)
+    box = Box(0.4, 0.3, 0.2)
+    first = pl.plan(s, box)
+    pl.validator = lambda p: not (abs(p.u0 - first.u0) < 1e-6 and abs(p.v0 - first.v0) < 1e-6
+                                  and p.rotated == first.rotated)
+    second = pl.plan(s, box)
+    assert second is not None
+    assert (second.u0, second.v0, second.rotated) != (first.u0, first.v0, first.rotated)
+    assert pl.last_stats['motion_checks'] >= 2
+    pl.validator = lambda p: False
+    assert pl.plan(s, box) is None
+    assert pl.last_stats['motion_checks'] == pl.validator_max

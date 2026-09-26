@@ -71,6 +71,20 @@ class Planner:
         self.physics = physics
         self.last_stats = {}
         self.exclude = []          # placements that failed in motion (same box): skip them
+        # Optional motion-feasibility check in the *current* scene (the ROS wrapper plugs in
+        # the motion server). Applied to candidates in ranked order, at most validator_max
+        # calls per plan; the core itself never imports ROS.
+        self.validator = None
+        self.validator_max = 12
+        self._vcalls = 0
+
+    def motion_ok(self, p):
+        if self.validator is None:
+            return True
+        if self._vcalls >= self.validator_max:
+            return False
+        self._vcalls += 1
+        return bool(self.validator(p))
 
     def excluded(self, p):
         return any(p.rotated == e.rotated and abs(p.u0 - e.u0) < 0.02 and abs(p.v0 - e.v0) < 0.02
@@ -100,6 +114,7 @@ class NaivePlanner(Planner):
 
     def plan(self, state, box, lookahead=(), check_only=False):
         t0 = time.perf_counter()
+        self._vcalls = 0
         cands = candidates(state, box, self.cfg.step, self.cfg.gap)
         cands.sort(key=lambda c: (-round(c[1] + c[3], 4), round(c[0], 4), c[4]))
         n = 0
@@ -109,12 +124,18 @@ class NaivePlanner(Planner):
             if self.excluded(p):
                 continue
             ok, _ = feasible(state, p, box, self.rules, self.reach)
+            if ok and not self.motion_ok(p):
+                if self._vcalls >= self.validator_max:
+                    break
+                continue
             if ok:
                 p.info = {'candidates_checked': n, 'physics_checks': 0,
+                          'motion_checks': self._vcalls,
                           'planning_time': time.perf_counter() - t0}
                 self.last_stats = p.info
                 return p
         self.last_stats = {'candidates_checked': n, 'physics_checks': 0,
+                           'motion_checks': self._vcalls,
                            'planning_time': time.perf_counter() - t0}
         return None
 
@@ -213,16 +234,24 @@ class HeuristicPlanner(Planner):
         if not check_only:
             feas = self.rerank(state, feas)
         chosen, checks = None, 0
-        if check_only or self.physics is None or self.cfg.physics_top_k <= 0:
-            chosen = feas[0] if feas else None
-        else:
-            for p in feas[:self.cfg.physics_top_k]:
-                checks += 1
-                if self.physics.stable(state, p, box):
-                    chosen = p
+        self._vcalls = 0
+        use_physics = not check_only and self.physics is not None and self.cfg.physics_top_k > 0
+        for p in feas:
+            if not self.motion_ok(p):
+                if self._vcalls >= self.validator_max:
                     break
+                continue
+            if not use_physics:
+                chosen = p
+                break
+            if checks >= self.cfg.physics_top_k:
+                break
+            checks += 1
+            if self.physics.stable(state, p, box):
+                chosen = p
+                break
         stats = {'candidates_checked': n, 'feasible': len(feas), 'physics_checks': checks,
-                 'planning_time': time.perf_counter() - t0}
+                 'motion_checks': self._vcalls, 'planning_time': time.perf_counter() - t0}
         self.last_stats = stats
         if chosen is not None:
             chosen.info = stats
