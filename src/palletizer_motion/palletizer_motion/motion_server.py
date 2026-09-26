@@ -112,7 +112,14 @@ class MotionServer(Node):
             self.get_logger().error('move_group not available')
             return
         ok = self.mv.add_objects(static_objects(self.cell))
+        if not self.have_joints(120.0):
+            self.get_logger().error('no /joint_states: controllers not running')
+            return
         self.get_logger().info(f'static planning scene applied: {ok}; motion_server ready')
+
+    def have_joints(self, timeout=30.0):
+        """Wait for joint states (the controllers can come up after this node)."""
+        return self.wait_for(lambda: self.joints is not None, timeout)
 
     def accept_goal(self, goal):
         return GoalResponse.ACCEPT if not self.busy.locked() else GoalResponse.REJECT
@@ -267,7 +274,8 @@ class MotionServer(Node):
     # ------------------------------------------------------------------ pick
     def execute_pick(self, goal_handle):
         with self.busy:
-            res = self._pick(goal_handle)
+            res = self._pick(goal_handle) if self.have_joints() else \
+                self._fail(PickBox.Result(), 'EXEC_FAILED', 'no joint states')
         (goal_handle.succeed if res.success else goal_handle.abort)()
         return res
 
@@ -397,7 +405,8 @@ class MotionServer(Node):
     # ------------------------------------------------------------------ place
     def execute_place(self, goal_handle):
         with self.busy:
-            res = self._place(goal_handle)
+            res = self._place(goal_handle) if self.have_joints() else \
+                self._fail(PlaceBox.Result(), 'EXEC_FAILED', 'no joint states')
         (goal_handle.succeed if res.success else goal_handle.abort)()
         return res
 
@@ -454,6 +463,9 @@ class MotionServer(Node):
 
     def on_check_placement(self, request, response):
         """Motion feasibility of a candidate placement in the current scene."""
+        if not self.have_joints():
+            response.success, response.message = False, 'no joint states'
+            return response
         if self.held is not None:
             top_in_tcp, yaw_off = self.held['top_in_tcp'], self.held['yaw_offset']
         else:
@@ -513,7 +525,7 @@ class MotionServer(Node):
     # ------------------------------------------------------------------ misc services
     def on_park(self, request, response):
         with self.busy:
-            ok, msg = self.go_park()
+            ok, msg = self.go_park() if self.have_joints() else (False, 'no joint states')
         response.success, response.message = ok, msg
         return response
 
