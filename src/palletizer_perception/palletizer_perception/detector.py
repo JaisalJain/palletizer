@@ -34,6 +34,7 @@ class TopFace:
     corners: np.ndarray       # 4x3 world corners of the fitted rectangle
     confidence: float
     note: str = ''
+    mask: np.ndarray = None   # top-face pixels (debug view)
 
 
 def normalize_yaw(yaw):
@@ -87,6 +88,12 @@ class BoxDetector:
 
     def pixel_pitch(self, z):
         return (self.cam_pos[2] - z) / self._K[0, 0]
+
+    def project(self, xyz):
+        """World points (N, 3) -> pixel coordinates (N, 2), OpenCV convention."""
+        p = (np.asarray(xyz, float).reshape(-1, 3) - self.cam_pos) @ self.R_world_opt
+        uv = (p[:, :2] / p[:, 2:3]) @ self._K[:2, :2].T + self._K[:2, 2]
+        return uv - float(self.cell['camera'].get('pixel_center_offset', 0.0))
 
     def occluded(self, depth):
         """Something higher than any box over the pick ROI (e.g. the forearm): the view of
@@ -219,7 +226,8 @@ class BoxDetector:
         return TopFace(
             length=length, width=width, height=z - self.belt_z,
             center=np.array([mean[0], mean[1], z]), yaw=yaw, area=area, fill_ratio=fill,
-            pixels=int(comp.sum()), corners=np.c_[corners, np.full(4, z)], confidence=conf)
+            pixels=int(comp.sum()), corners=np.c_[corners, np.full(4, z)], confidence=conf,
+            mask=comp)
 
     @staticmethod
     def _front_x(face):

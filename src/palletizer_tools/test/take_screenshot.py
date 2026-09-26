@@ -61,11 +61,12 @@ def main():
     sim.wait_ready()
     sim.delete_all_boxes()
 
-    # Stage: a few boxes on the pallet, boxes on the belt, arm above the pick zone.
-    pal = sim.cell['pallet']
-    ox = pal['center_xy'][0] - pal['size'][0] / 2
-    oy = pal['center_xy'][1] + pal['size'][1] / 2
-    top = pal['size'][2]
+    # Stage: a few boxes on the pallet (ground-truth pallet pose: this is a picture, not
+    # robot control), boxes on the belt, arm above the pick zone.
+    sim.wait_for(lambda: sim.station_pallet() is not None, 60.0)
+    _, pxyz, _ = sim.station_pallet()
+    ptype = sim.cell['exchanger']['pallet_types'][sim.cell['exchanger']['order'][0]]['size']
+    ox, oy, top = pxyz[0] - ptype[0] / 2, pxyz[1] + ptype[1] / 2, ptype[2]
     stacked = [((0.40, 0.30, 0.25), (ox + 0.22, oy - 0.17)), ((0.40, 0.30, 0.25), (ox + 0.64, oy - 0.17)),
                ((0.35, 0.45, 0.30), (ox + 0.20, oy - 0.57)), ((0.50, 0.40, 0.30), (ox + 0.70, oy - 0.57)),
                ((0.38, 0.30, 0.20), (ox + 0.22, oy - 0.17))]

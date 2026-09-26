@@ -3,7 +3,10 @@
 Inputs (reliable QoS): /overhead_camera/depth_image, /overhead_camera/camera_info,
 /overhead_camera/image (only used to split equal-height touching boxes),
 /conveyor_controller/box_ready (Bool, trigger).
-Outputs: /perception/detected_box (DetectedBox), /perception/markers (MarkerArray)
+Outputs: /perception/detected_box (DetectedBox), /perception/markers (MarkerArray),
+         /perception/debug_image (Image, RGB): segmentation tint, top-face contour, fitted
+         rectangle, grasp point, yaw arrow, measured L x W x H / yaw / confidence and whether
+         the box matches the current SKU (/pallet/status)
 Service: /perception/detect_box (DetectBox) - averages `perception.frames` fresh depth frames.
 """
 
@@ -15,17 +18,19 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point
-from palletizer_interfaces.msg import DetectedBox
+from palletizer_interfaces.msg import DetectedBox, PalletStatus
 from palletizer_interfaces.srv import DetectBox
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
+from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Bool, ColorRGBA
 from visualization_msgs.msg import Marker, MarkerArray
 
 from tf2_ros import Buffer, TransformListener
 
+from palletizer_perception import debug_view as dv
 from palletizer_perception.detector import BoxDetector
 from palletizer_tools import cell_config
 
@@ -35,7 +40,7 @@ class BoxPerception(Node):
     def __init__(self):
         super().__init__('box_perception')
         cfg_path = self.declare_parameter('cell_config', '').value
-        self.cell = cell_config.load(cfg_path or None)
+        self.cell = cell_config.load(cfg_path or None, role='robot')
         self.det = BoxDetector(self.cell)
         self.n_frames = int(self.cell['perception']['frames'])
         self.timeout = float(self.cell['perception']['detect_timeout'])
@@ -61,6 +66,16 @@ class BoxPerception(Node):
                                  callback_group=trig)
         self.box_pub = self.create_publisher(DetectedBox, '/perception/detected_box', 10)
         self.marker_pub = self.create_publisher(MarkerArray, '/perception/markers', 10)
+        self.debug_pub = self.create_publisher(
+            Image, '/perception/debug_image',
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
+        self.sku_tol = float(self.cell['packing']['sku_tolerance'])
+        self.status = None
+        self.create_subscription(
+            PalletStatus, '/pallet/status', lambda m: setattr(self, 'status', m),
+            QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE,
+                       durability=DurabilityPolicy.TRANSIENT_LOCAL))
         self.create_service(DetectBox, '/perception/detect_box', self.on_detect_srv,
                             callback_group=trig)
         self.get_logger().info('box_perception ready')
@@ -136,11 +151,13 @@ class BoxPerception(Node):
         with np.errstate(invalid='ignore'):
             depth = np.nanmean(np.where(np.isfinite(stack), stack, np.nan), axis=0)
         if self.det.occluded(depth):
+            self.publish_debug([], None, None, 'robot in the camera view')
             return False, 'robot in the camera view (something above the pick ROI)', DetectedBox()
-        faces, _ = self.det.detect(depth, self.rgb)
+        faces, dbg = self.det.detect(depth, self.rgb)
         face = self.det.pick_candidate(faces)
         if face is None:
             self.publish_markers(faces, None)
+            self.publish_debug(faces, None, dbg, f'no confident box ({len(faces)} faces)')
             return False, f'no confident box in the pick ROI ({len(faces)} faces)', DetectedBox()
 
         box = DetectedBox()
@@ -156,11 +173,63 @@ class BoxPerception(Node):
         box.yaw = face.yaw
         box.confidence = face.confidence
         self.publish_markers(faces, face)
+        self.publish_debug(faces, face, dbg, '')
         self.get_logger().info(
             f'box {box.id}: {face.length * 1000:.0f} x {face.width * 1000:.0f} x '
             f'{face.height * 1000:.0f} mm, center ({face.center[0]:.3f}, {face.center[1]:.3f}), '
             f'yaw {math.degrees(face.yaw):+.1f} deg, conf {face.confidence:.2f} {face.note}')
         return True, 'ok', box
+
+    def sku_text(self, face):
+        s = self.status
+        if s is None or s.mode != 'single_sku':
+            return 'SKU: - (mixed mode)', (200, 200, 200)
+        if s.sku_length <= 0 or s.boxes_placed == 0:
+            return 'SKU: first box of the pallet (defines the SKU)', (120, 200, 255)
+        d = (abs(face.length - s.sku_length), abs(face.width - s.sku_width),
+             abs(face.height - s.sku_height))
+        ref = f'{s.sku_length * 1000:.0f}x{s.sku_width * 1000:.0f}x{s.sku_height * 1000:.0f}'
+        if max(d) <= self.sku_tol:
+            return f'SKU match ({ref}, max diff {max(d) * 1000:.1f} mm)', (80, 255, 80)
+        return f'SKU CHANGE (current {ref}, diff {max(d) * 1000:.0f} mm)', (255, 90, 60)
+
+    def publish_debug(self, faces, chosen, dbg, message):
+        """Conveyor camera view with the detection drawn in (only when someone listens)."""
+        if self.debug_pub.get_subscription_count() == 0 or self.rgb is None or \
+                self.det._K is None:
+            return
+        img = np.ascontiguousarray(self.rgb.copy())
+        z = self.det.belt_z
+        roi = [(self.det.roi_x[0], self.det.roi_y[0], z), (self.det.roi_x[1], self.det.roi_y[0], z),
+               (self.det.roi_x[1], self.det.roi_y[1], z), (self.det.roi_x[0], self.det.roi_y[1], z)]
+        dv.poly(img, self.det.project(roi), (255, 255, 0), 1)
+        if dbg is not None:
+            dv.tint(img, dbg['object'], (60, 140, 255), 0.35)
+        for f in faces:
+            if f is not chosen:
+                dv.poly(img, self.det.project(f.corners), (255, 150, 0), 2)
+        lines, colors = [], []
+        if chosen is not None:
+            dv.tint(img, chosen.mask, (0, 255, 90), 0.35)
+            dv.contour(img, chosen.mask, (255, 255, 0), 1)
+            dv.poly(img, self.det.project(chosen.corners), (0, 255, 0), 2)
+            c = self.det.project(chosen.center)[0]
+            dv.crosshair(img, c, (255, 0, 0), 12, 2)
+            tip = chosen.center + np.array([math.cos(chosen.yaw), math.sin(chosen.yaw), 0.0]) * \
+                (chosen.length / 2)
+            dv.arrow(img, c, self.det.project(tip)[0], (255, 0, 255), 2)
+            sku, sku_c = self.sku_text(chosen)
+            lines = [f'{chosen.length * 1000:.0f} x {chosen.width * 1000:.0f} x '
+                     f'{chosen.height * 1000:.0f} mm', f'yaw {math.degrees(chosen.yaw):+.1f} deg'
+                     f'   conf {chosen.confidence:.2f}', sku]
+            colors = [(255, 255, 255), (255, 255, 255), sku_c]
+        else:
+            lines, colors = [f'no detection: {message}'], [(255, 120, 120)]
+        dv.text_block(img, lines, (8, 8), colors)
+        msg = self.bridge.cv2_to_imgmsg(img, 'rgb8')
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'overhead_camera_optical_frame'
+        self.debug_pub.publish(msg)
 
     def publish_markers(self, faces, chosen):
         arr = MarkerArray()

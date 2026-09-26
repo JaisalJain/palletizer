@@ -168,7 +168,7 @@ motion:
   planning_group: manipulator
   tcp_link: suction_tcp
   ptp_velocity_scaling: 1.0        # (v2 speed-up; v1: 0.6 / 0.4 / 0.25 / 0.25 / 0.08)
-  ptp_acceleration_scaling: 0.8
+  ptp_acceleration_scaling: 1.0
   lin_velocity_scaling: 0.6        # of pilz cartesian limits (1.0 m/s)
   lin_acceleration_scaling: 0.45
   lin_slow_velocity_scaling: 0.1   # last approach centimetres (descent into contact / release)

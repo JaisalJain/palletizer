@@ -37,11 +37,39 @@ Visualization Manager:
         base_link: {Value: true}
         suction_tcp: {Value: true}
         pick_zone: {Value: true}
-        pallet_origin: {Value: true}
+        pallet_frame: {Value: true}
         overhead_camera_optical_frame: {Value: true}
+        pallet_camera_optical_frame: {Value: true}
+    - Class: rviz_default_plugins/MarkerArray
+      Name: BoxPerception
+      Enabled: true
+      Topic:
+        Value: /perception/markers
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/MarkerArray
+      Name: PackingHeightMapGhost
+      Enabled: true
+      Topic:
+        Value: /packing/markers
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+    - Class: rviz_default_plugins/MarkerArray
+      Name: PalletPerception
+      Enabled: true
+      Topic:
+        Value: /pallet_perception/markers
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
     - Class: rviz_default_plugins/PointCloud2
       Name: OverheadCloud
-      Enabled: true
+      Enabled: false
       Topic:
         Value: /overhead_camera/points
         Depth: 5
@@ -52,15 +80,38 @@ Visualization Manager:
       Style: Points
       Size (Pixels): 2
       Decay Time: 0
-    - Class: rviz_default_plugins/Image
-      Name: OverheadRGB
+    - Class: rviz_2d_overlay_plugins/TextOverlay
+      Name: PalletStatus
       Enabled: true
       Topic:
-        Value: /overhead_camera/image
-        Depth: 5
-        Durability Policy: Volatile
+        Value: /pallet/overlay
+        Depth: 1
+        Durability Policy: Transient Local
         History Policy: Keep Last
-        Reliability Policy: Best Effort
+        Reliability Policy: Reliable
+      Overtake BG Color Properties: false
+      Overtake FG Color Properties: false
+      Overtake Position Properties: false
+    - Class: rviz_default_plugins/Image
+      Name: ConveyorPerception
+      Enabled: true
+      Topic:
+        Value: /perception/debug_image
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Normalize Range: true
+    - Class: rviz_default_plugins/Image
+      Name: PalletPerception
+      Enabled: true
+      Topic:
+        Value: /pallet_perception/debug_image
+        Depth: 1
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Normalize Range: true
   Global Options:
     Fixed Frame: world
     Background Color: 48; 48; 48
@@ -72,11 +123,17 @@ Visualization Manager:
     Current:
       Class: rviz_default_plugins/Orbit
       Name: Current View
-      Distance: 5.5
-      Focal Point: {X: -0.5, Y: 0.1, Z: 0.6}
-      Pitch: 0.55
-      Yaw: 3.9
+      Distance: 4.6
+      Focal Point: {X: 0.0, Y: 0.0, Z: 0.6}
+      Pitch: 0.62
+      Yaw: 3.6
     Saved: ~
 Window Geometry:
-  Width: 1400
+  Width: 1600
   Height: 900
+  Displays:
+    collapsed: true
+  ConveyorPerception:
+    collapsed: false
+  PalletPerception:
+    collapsed: false

@@ -464,7 +464,14 @@ public:
   BT::NodeStatus done(const pi::srv::Weigh::Response & r) override
   {
     double lim = getInput<double>("max_mass").value();
-    if (!r.success || std::abs(r.mass) > lim) {
+    if (!r.success) {
+      // no F/T reading: the place action already confirmed the release with the suction
+      // sensor; do not turn a missing measurement into a failed placement
+      RCLCPP_WARN(ctx_->log(), "release check: %s (relying on the suction sensor)",
+        r.message.c_str());
+      return BT::NodeStatus::SUCCESS;
+    }
+    if (std::abs(r.mass) > lim) {
       RCLCPP_WARN(ctx_->log(), "release not verified: gripper still weighs %.2f kg", r.mass);
       return BT::NodeStatus::FAILURE;
     }

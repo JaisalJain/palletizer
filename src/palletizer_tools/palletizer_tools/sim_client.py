@@ -230,6 +230,41 @@ class SimClient(Node):
             raise RuntimeError('exchange timed out')
         return res.result().result
 
+    def start_pallet(self, exchange=False, pallet_type=''):
+        """Like the orchestrator's NewPallet: (optionally) exchange the pallet, have the new
+        one measured by pallet_perception and hand it to packing and the planning scene.
+        Returns the MeasurePallet response."""
+        from palletizer_interfaces.srv import MeasurePallet, SetPallet
+        if not hasattr(self, '_pallet_clis'):
+            self._pallet_clis = {
+                'measure': self.create_client(MeasurePallet, '/pallet_perception/measure_pallet'),
+                'packing': self.create_client(SetPallet, '/packing/set_pallet'),
+                'scene': self.create_client(SetPallet, '/motion/scene/set_pallet'),
+                'reset': self.create_client(Trigger, '/pallet_perception/reset'),
+                'clear': self.create_client(Trigger, '/motion/scene/clear_placed'),
+                'park': self.create_client(Trigger, '/motion/park')}
+        c = self._pallet_clis
+        if exchange:
+            self.call(c['park'], Trigger.Request(), timeout=60.0)
+            self.call(c['reset'], Trigger.Request())
+            self.call(c['clear'], Trigger.Request())
+            none = SetPallet.Request()
+            none.pallet.valid = False
+            self.call(c['packing'], none)
+            self.call(c['scene'], none)
+            res = self.exchange_pallet(pallet_type)
+            if not res.success:
+                raise RuntimeError(f'exchange failed: {res.message}')
+        self.wait_for(lambda: self.station_pallet() is not None and
+                      self.mover_state.startswith('idle'), 120.0)
+        m = self.call(c['measure'], MeasurePallet.Request(), timeout=90.0)
+        if not m.success:
+            raise RuntimeError(f'pallet measurement failed: {m.message}')
+        req = SetPallet.Request(pallet=m.pallet)
+        self.call(c['packing'], req, timeout=30.0)
+        self.call(c['scene'], req, timeout=30.0)
+        return m
+
     def box_top_center(self, name, height):
         pos, quat = self.box_poses[name]
         return pos + Rotation.from_quat(quat).apply([0, 0, height / 2.0])

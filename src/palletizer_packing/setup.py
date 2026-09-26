@@ -19,6 +19,7 @@ setup(
     entry_points={
         'console_scripts': [
             'packing_node = palletizer_packing.packing_node:main',
+            'pattern_report = palletizer_packing.pattern_report:main',
         ],
     },
 )

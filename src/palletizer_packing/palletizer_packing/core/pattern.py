@@ -507,7 +507,9 @@ class PatternPlanner:
                for e in self.exclude):
             return self._fail('NO_FEASIBLE_PLACEMENT', f'slot {i} failed in motion', t0)
         checks = 0
-        if self.validator is not None:
+        # the pre-check (before the pick) only needs SKU, slot and rules; the motion check
+        # runs in the full plan, in parallel with the pick
+        if self.validator is not None and not check_only:
             checks = 1
             if not self.validator(p):
                 return self._fail('NO_FEASIBLE_PLACEMENT', f'slot {i}: motion check failed', t0,

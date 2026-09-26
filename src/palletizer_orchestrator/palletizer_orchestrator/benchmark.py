@@ -39,8 +39,11 @@ def cleanup():
     time.sleep(2.0)
 
 
+PREFIX = 'bench'
+
+
 def run_one(planner, seed, rtf, timeout, log_dir, attempt=1):
-    run = f'bench_{planner}_seed{seed}'
+    run = f'{PREFIX}_{planner}_seed{seed}'
     for f in glob.glob(os.path.join(RESULTS, f'{run}_*.csv')):
         os.remove(f)
     suffix = '' if attempt == 1 else f'_attempt{attempt}'
@@ -80,10 +83,10 @@ def load(planners):
     out = {}
     for p in planners:
         pallets, boxes = [], []
-        for f in sorted(glob.glob(os.path.join(RESULTS, f'bench_{p}_seed*_pallets.csv'))):
+        for f in sorted(glob.glob(os.path.join(RESULTS, f'{PREFIX}_{p}_seed*_pallets.csv'))):
             rows = [r for r in csv.DictReader(open(f)) if r['pallet'] == '0']
             pallets += rows
-        for f in sorted(glob.glob(os.path.join(RESULTS, f'bench_{p}_seed*_boxes.csv'))):
+        for f in sorted(glob.glob(os.path.join(RESULTS, f'{PREFIX}_{p}_seed*_boxes.csv'))):
             boxes += [r for r in csv.DictReader(open(f)) if r['pallet'] == '0']
         out[p] = (pallets, boxes)
     return out
@@ -98,12 +101,14 @@ def ms(values, fmt='{:.1f}'):
 
 def summary(planners, rtf):
     data = load(planners)
+    begin, end = (BEGIN, END) if PREFIX == 'bench' else \
+        (f'<!-- {PREFIX.upper()}:BEGIN -->', f'<!-- {PREFIX.upper()}:END -->')
     lines = [
-        BEGIN,
+        begin,
         '',
         f'Real-time factor: {rtf}. One pallet per (planner, seed) in a fresh headless '
         'simulation; the same seed gives both planners the same box sequence. '
-        'Mean ± std over pallets. Raw data: `results/bench_*`.',
+        f'Mean ± std over pallets. Raw data: `results/{PREFIX}_*`.',
         '',
         '| Planner | Pallets | Seeds | Fill % | Boxes / pallet | Max height [m] | Collapses | '
         'Lost boxes | Rejected | Picks / min | Planning time [ms] | Cycle time [s] | '
@@ -150,13 +155,13 @@ def summary(planners, rtf):
             boxes_n = {p: {r['seed']: r['boxes'] for r in data[p][0]} for p in planners}
             for s in common:
                 lines.append(f'| {s} | {fa[s]:.1f} ({boxes_n[a][s]}) | {fb[s]:.1f} ({boxes_n[b][s]}) |')
-    lines += ['', END]
+    lines += ['', end]
     block = '\n'.join(lines)
     doc = open(DOC).read() if os.path.exists(DOC) else '# Results\n'
-    if BEGIN in doc and END in doc:
-        doc = doc[:doc.index(BEGIN)] + block + doc[doc.index(END) + len(END):]
+    if begin in doc and end in doc:
+        doc = doc[:doc.index(begin)] + block + doc[doc.index(end) + len(end):]
     else:
-        doc += '\n## Milestone E — Benchmark\n\n' + block + '\n'
+        doc += '\n## Benchmark\n\n' + block + '\n'
     with open(DOC, 'w') as f:
         f.write(doc)
     print(block)
@@ -206,9 +211,12 @@ def main(argv=None):
     ap.add_argument('--rtf', type=float, default=1.0)
     ap.add_argument('--timeout', type=float, default=1800.0)
     ap.add_argument('--summary-only', action='store_true')
+    ap.add_argument('--prefix', default='bench', help='run name prefix (v2 regression: v2bench)')
     ap.add_argument('--run-summary', nargs=2, metavar=('RUN', 'MARKER'),
                     help='write the summary of one auto run into docs/RESULTS.md and exit')
     args = ap.parse_args(argv)
+    global PREFIX
+    PREFIX = args.prefix
     if args.run_summary:
         summarize_run(*args.run_summary)
         return 0

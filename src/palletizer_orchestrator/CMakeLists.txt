@@ -33,6 +33,7 @@ install(PROGRAMS
   scripts/benchmark
   scripts/pick_place_test
   scripts/status_overlay
+  scripts/sku_runs
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

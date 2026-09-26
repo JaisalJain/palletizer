@@ -13,6 +13,9 @@ Topics (out):
   /pallet_perception/height_map (HeightMap, transient local) after every measurement
   /pallet_perception/placement_check (PlacementCheck), /pallet_perception/stack_events
       (StackEvent), /pallet_perception/markers (MarkerArray)
+  /pallet_perception/debug_image (Image, RGB, 1 Hz while someone listens): pallet camera view
+      with the measured pallet outline, measured box tops (red: moved), the NEXT target as a
+      ghost rectangle (/packing/next_target) and a coloured height-map inset
 Topics (in): /pallet_camera/{depth_image,image,camera_info} (reliable),
   /orchestrator/cycle_report (placed boxes not yet verified are excluded from monitoring)
 
@@ -31,8 +34,8 @@ import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Point, TransformStamped
-from palletizer_interfaces.msg import (CycleReport, DetectedPallet, HeightMap, PlacementCheck,
-                                       StackEvent)
+from palletizer_interfaces.msg import (CycleReport, DetectedPallet, HeightMap, Placement,
+                                       PlacementCheck, StackEvent)
 from palletizer_interfaces.srv import MeasurePallet, VerifyPlacement
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
 from rclpy.executors import MultiThreadedExecutor
@@ -44,6 +47,7 @@ from std_srvs.srv import Trigger
 from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
+from palletizer_perception import debug_view as dv
 from palletizer_perception.pallet_detector import BoxRecord, PalletDetector, normalize_axis
 from palletizer_tools import cell_config
 from palletizer_tools.pallet_frame import PalletFrame
@@ -88,6 +92,8 @@ class PalletPerception(Node):
         self.verified = 0
         self.events = 0
         self.last_view = None             # latest clear averaged depth (debug view)
+        self.last_map = None              # latest perceived height map (debug view)
+        self.next_target = None
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -108,6 +114,11 @@ class PalletPerception(Node):
                                                50)
         self.event_pub = self.create_publisher(StackEvent, '/pallet_perception/stack_events', 50)
         self.marker_pub = self.create_publisher(MarkerArray, '/pallet_perception/markers', 10)
+        self.debug_pub = self.create_publisher(Image, '/pallet_perception/debug_image', LATCHED)
+        self.create_subscription(Placement, '/packing/next_target',
+                                 lambda m: setattr(self, 'next_target', m), LATCHED,
+                                 callback_group=sensors)
+        self.create_timer(1.0, self.publish_debug, callback_group=sensors)
         work = MutuallyExclusiveCallbackGroup()
         self.create_service(MeasurePallet, '/pallet_perception/measure_pallet', self.on_measure,
                             callback_group=work)
@@ -376,6 +387,7 @@ class PalletPerception(Node):
         if self.frame is None:
             return
         H = self.det.height_map(P, self.frame)
+        self.last_map = H
         m = HeightMap()
         m.header.stamp = self.get_clock().now().to_msg()
         m.header.frame_id = 'pallet_frame'
@@ -385,6 +397,59 @@ class PalletPerception(Node):
         m.data = H.ravel().tolist()
         m.placements = self.verified
         self.map_pub.publish(m)
+
+    def publish_debug(self):
+        if self.debug_pub.get_subscription_count() == 0 or self.rgb is None or \
+                self.info is None:
+            return
+        self.det.cam.set_intrinsics(self.info.k, self.info.width, self.info.height)
+        cam = self.det.cam
+        img = np.ascontiguousarray(self.rgb.copy())
+        f = self.frame
+        lines = []
+        if f is None:
+            lines.append('no pallet measured')
+        else:
+            dv.poly(img, cam.project(np.array(f.corners())), (60, 170, 255), 2)
+            o = cam.project(f.to_world(0, 0))[0]
+            dv.arrow(img, o, cam.project(f.to_world(0.25, 0))[0], (255, 60, 60), 2)
+            dv.arrow(img, o, cam.project(f.to_world(0, 0.25))[0], (60, 255, 60), 2)
+            for rec in list(self.records):
+                c, s_ = math.cos(rec.yaw), math.sin(rec.yaw)
+                ex, ey = np.array([c, s_]), np.array([-s_, c])
+                pts = [np.r_[rec.center[:2] + a * rec.length / 2 * ex + b * rec.width / 2 * ey,
+                             rec.center[2]] for a, b in ((1, 1), (-1, 1), (-1, -1), (1, -1))]
+                dv.poly(img, cam.project(np.array(pts)),
+                        (255, 50, 50) if rec.events else (40, 255, 90), 2)
+            t = self.next_target
+            if t is not None and t.height > 0:
+                c, s_ = math.cos(t.yaw), math.sin(t.yaw)
+                L, W = (t.size_y, t.size_x) if t.rotated else (t.size_x, t.size_y)
+                ex, ey = np.array([c, s_]), np.array([-s_, c])
+                ctr = np.array([t.top_center.position.x, t.top_center.position.y])
+                pts = [np.r_[ctr + a * L / 2 * ex + b * W / 2 * ey, t.top_center.position.z]
+                       for a, b in ((1, 1), (-1, 1), (-1, -1), (1, -1))]
+                uv = cam.project(np.array(pts))
+                dv.fill_poly(img, uv, (255, 255, 255), 0.35)
+                dv.poly(img, uv, (255, 255, 255), 2)
+                dv.crosshair(img, cam.project(np.array([ctr[0], ctr[1],
+                                                        t.top_center.position.z]))[0],
+                             (255, 255, 255), 8, 1)
+            lines += [f'pallet {f.size_u * 1000:.0f} x {f.size_v * 1000:.0f} mm, deck '
+                      f'{f.deck_z * 1000:.0f} mm, yaw {math.degrees(f.yaw):+.2f} deg',
+                      f'placements verified {self.verified}   stack events {self.events}',
+                      'white: next target']
+            if self.last_map is not None:
+                st = self.cell['pallet_station']['max_stack_height']
+                inset = dv.heightmap_inset(self.last_map, st, 2)
+                x = img.shape[1] - inset.shape[1] - 10
+                y = img.shape[0] - inset.shape[0] - 24
+                dv.paste(img, inset, (x, y), f'perceived height map 0-{st:.1f} m')
+        dv.text_block(img, lines, (8, 8))
+        msg = self.bridge.cv2_to_imgmsg(img, 'rgb8')
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = 'pallet_camera_optical_frame'
+        self.debug_pub.publish(msg)
 
     def publish_markers(self):
         arr = MarkerArray()

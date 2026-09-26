@@ -118,6 +118,7 @@ class PackingNode(Node):
         p = req.pallet
         if not p.valid:
             self.frame = self.reach = self.spec = self.state = None
+            self.target_pub.publish(PlacementMsg())
             self.planner.reset() if hasattr(self.planner, 'reset') else None
             self.ghost = None
             res.success, res.message = True, 'no pallet'
@@ -252,6 +253,7 @@ class PackingNode(Node):
             if st.ok:
                 res.success, res.placement = True, self.to_msg(p, box)
                 res.message = 'recheck with measured mass: ok'
+                self.get_logger().info(f'recheck with {box.mass:.1f} kg: ok')
                 res.state = self.packing_state()
                 return res
             self.get_logger().info(f'recheck with {box.mass:.1f} kg failed ({st.reason}): '
@@ -328,6 +330,7 @@ class PackingNode(Node):
         p = self.from_msg(req.placement, box)
         self.state.place(p, box, req.sim_model_name)
         self.ghost = None
+        self.target_pub.publish(PlacementMsg())          # no pending target
         self.last_plan = None
         res.success = True
         res.message = (f'{len(self.state.boxes)} boxes, fill {self.state.fill_percent():.1f} %, '

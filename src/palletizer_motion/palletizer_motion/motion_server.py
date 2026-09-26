@@ -108,8 +108,11 @@ class MotionServer(Node):
         self.attached_name = msg.data
 
     def on_wrench(self, msg):
+        # sim-time stamp of the measurement (not the arrival: callbacks can be delayed while
+        # the executor threads are busy, which once left a weighing window empty)
+        t = msg.header.stamp.sec + msg.header.stamp.nanosec * 1e-9
         with self.lock:
-            self.wrench.append((time.monotonic(), msg.wrench.force.z))
+            self.wrench.append((t, msg.wrench.force.z))
             self.wrench = self.wrench[-2000:]
 
     def init_scene(self):
@@ -131,10 +134,18 @@ class MotionServer(Node):
 
     # ------------------------------------------------------------------ helpers
     def mean_fz(self, window):
-        t_end = time.monotonic() + window
-        time.sleep(window)
+        """Mean force over the next `window` s of sim time (by measurement stamps)."""
+        t0 = self.get_clock().now().nanoseconds * 1e-9
+        t1 = t0 + window
+        end = time.monotonic() + window + 3.0
+
+        def latest():
+            with self.lock:
+                return self.wrench[-1][0] if self.wrench else 0.0
+        while latest() < t1 and time.monotonic() < end:
+            time.sleep(0.01)
         with self.lock:
-            vals = [f for t, f in self.wrench if t_end - window <= t <= t_end + 0.05]
+            vals = [f for t, f in self.wrench if t0 <= t <= t1]
         return float(np.mean(vals)) if vals else None
 
     def on_weigh(self, request, response):
@@ -493,6 +504,7 @@ class MotionServer(Node):
         m = self.m
         if self.held is None or not self.grasped:
             return self._fail(res, 'EXEC_FAILED', 'not holding a box')
+        self.feedback(gh, PlaceBox, 'place poses (IK + collision check)', 0.02)
         plan = self.place_poses(pl, self.held['top_in_tcp'], self.held['yaw_offset'],
                                 self.held['box'].height)
         if isinstance(plan, str):
@@ -592,7 +604,7 @@ class MotionServer(Node):
 def main():
     rclpy.init()
     node = MotionServer()
-    ex = MultiThreadedExecutor(num_threads=8)
+    ex = MultiThreadedExecutor(num_threads=16)
     ex.add_node(node)
     ex.spin()
 

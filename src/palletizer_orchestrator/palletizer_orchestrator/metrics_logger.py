@@ -49,7 +49,7 @@ PALLET_FIELDS = [
     'max_planning_time_s', 'mean_cycle_time_s', 'mean_place_err_mm', 'max_place_err_mm',
     'mean_mass_err_kg', 'end_reason', 'wall_time', 'mode', 'pallet_u', 'pallet_v',
     'usable_height_m', 'sku_L', 'sku_W', 'sku_H', 'boxes_in_pattern', 'layers',
-    'detected_events', 'placement_checks', 'max_cam_vs_gt_mm', 'picks_per_min_steady']
+    'detected_events', 'placement_checks', 'max_cam_vs_gt_mm', 'picks_per_min_steady', 'rtf']
 CHECK_FIELDS = [
     'run', 'pallet', 'index', 'sim_name', 'detected', 'cam_err_xy_mm', 'cam_err_z_mm',
     'cam_err_yaw_deg', 'gt_err_xy_mm', 'gt_err_z_mm', 'cam_vs_gt_xy_mm', 'cam_vs_gt_z_mm',
@@ -121,7 +121,7 @@ class MetricsLogger(Node):
         self.pending.append((time.monotonic() + self.settle, r))
         if r.success:
             self.stamps.setdefault(r.pallet_index, []).append(
-                r.stamp.sec + r.stamp.nanosec * 1e-9)
+                (r.stamp.sec + r.stamp.nanosec * 1e-9, time.time()))
 
     # ------------------------------------------------------------------ per box
     def finalize_box(self, r):
@@ -264,7 +264,7 @@ class MetricsLogger(Node):
             'sku_H': r.sku_height, 'boxes_in_pattern': r.boxes_in_pattern, 'layers': r.layers,
             'detected_events': len(self.events), 'placement_checks': len(self.checks),
             'max_cam_vs_gt_mm': max(agree) if agree else '',
-            'picks_per_min_steady': self.steady_rate(r)}
+            'picks_per_min_steady': self.steady_rate(r), 'rtf': self.rtf(r)}
         with open(self.pallet_csv, 'a', newline='') as f:
             csv.DictWriter(f, fieldnames=PALLET_FIELDS).writerow(row)
         self.pallets_done += 1
@@ -281,10 +281,17 @@ class MetricsLogger(Node):
     def steady_rate(self, r):
         """Placements per minute between the first and the last placement of the pallet (sim
         time, from the cycle reports): excludes the exchange and the first box's arrival."""
-        st = sorted(self.stamps.get(r.pallet_index, []))
+        st = sorted(t for t, _ in self.stamps.get(r.pallet_index, []))
         if len(st) < 2:
             return ''
         return 60.0 * (len(st) - 1) / (st[-1] - st[0])
+
+    def rtf(self, r):
+        """Real-time factor over the pallet (sim time / wall time between placements)."""
+        st = sorted(self.stamps.get(r.pallet_index, []))
+        if len(st) < 2 or st[-1][1] <= st[0][1]:
+            return ''
+        return (st[-1][0] - st[0][0]) / (st[-1][1] - st[0][1])
 
 
 def main():

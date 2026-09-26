@@ -270,6 +270,7 @@ class PalletExchanger(Node):
         return ok, f'{pallet} removed with {len(names) - 1} boxes'
 
     def exchange(self, feedback, pallet_type=''):
+        self.mode = self.get_parameter('exchange_mode').value      # may change at run time
         if self.mode == 'operator':
             feedback('waiting for /pallet/confirm_exchange', 0.02)
             self.confirm.clear()

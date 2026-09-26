@@ -6,6 +6,7 @@
   overhanging the edge tips off, a resting box is not held in place (shove + settle)
 - during an exchange the pallet and its boxes move rigidly together, then are removed,
   and a new pallet arrives whose deck again carries boxes
+- exchange_mode operator: the exchange waits for /pallet/confirm_exchange
 """
 
 import math
@@ -128,6 +129,35 @@ def test(sim, c):
     zc = sim.box_poses['box_mt_c'][0][2]
     c.check(abs(zc - (z0 + BOX[2] / 2)) < 0.005, f'box rests on the new deck (z {zc:.4f})')
     sim.delete_box('box_mt_c')
+
+    # --- operator mode: nothing moves until /pallet/confirm_exchange
+    from rcl_interfaces.msg import Parameter, ParameterType, ParameterValue
+    from rcl_interfaces.srv import SetParameters
+    from std_srvs.srv import Trigger
+    setp = sim.create_client(SetParameters, '/pallet_exchanger/set_parameters')
+
+    def mode(m):
+        p = Parameter(name='exchange_mode', value=ParameterValue(
+            type=ParameterType.PARAMETER_STRING, string_value=m))
+        return sim.call(setp, SetParameters.Request(parameters=[p])).results[0].successful
+    c.check(mode('operator'), 'exchange_mode set to operator')
+    before = sim.station_pallet()[0]
+    phases.clear()
+    done = []
+    t = threading.Thread(target=lambda: done.append(sim.exchange_pallet(
+        feedback=lambda fb: phases.append(fb.feedback.phase))), daemon=True)
+    t.start()
+    time.sleep(4.0)
+    waiting = any('confirm' in p for p in phases)
+    c.check(waiting and not done and sim.station_pallet()[0] == before and
+            sim.mover_state.startswith('idle'),
+            f'operator mode: exchange waits for confirmation ({phases[-1:]})')
+    confirm = sim.create_client(Trigger, '/pallet/confirm_exchange')
+    sim.call(confirm, Trigger.Request())
+    t.join(timeout=150.0)
+    c.check(bool(done) and done[0].success and sim.station_pallet() is not None and
+            sim.station_pallet()[0] != before, 'confirmed exchange completed')
+    mode('auto')
 
 
 if __name__ == '__main__':
