@@ -212,7 +212,8 @@ sku_runs`, `pick_place_test`, `benchmark --prefix v2bench`. `sim_ctl.sh start|st
   above ~0.8 m (world) next to the pedestal block the upper arm for some far targets; the
   offline map cannot know (no boxes) → the pattern's motion check drops those top-layer slots.
 - Pilz LIN at 0.6 m/s sometimes exceeds a joint limit near wrist reconfigurations → the same line
-  is re-planned at 0.25 (`motion.lin_fallback_scaling`).
+  is re-planned at 0.25, then 0.1 (arm nearly stretched at far top corners;
+  `motion.lin_fallback_scaling`).
 - Simulated sensing and actuation are ideal (pinhole camera, no blur, joint position control) →
   perception and placement errors are far below the thresholds; expect several mm on hardware.
 - Mixed-mode fill % is low (~25 %) by construction (random boxes, strict support rule, the pallet

@@ -50,7 +50,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from palletizer_perception import debug_view as dv
 from palletizer_perception.pallet_detector import PalletDetector, normalize_axis
-from palletizer_tools import cell_config
+from palletizer_tools import cell_config, sim_time
 from palletizer_tools.pallet_frame import PalletFrame
 
 LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -165,14 +165,20 @@ class PalletPerception(Node):
         return ''
 
     def acquire(self, timeout):
-        """Averaged depth of n fresh frames taken while the station is clear, or None."""
-        t_wall = time.monotonic()
-        while time.monotonic() - t_wall < timeout:
+        """Averaged depth of n fresh frames taken while the station is clear, or None.
+        `timeout` in sim time (wall cap 10x + 30 s): the RTF drops far below 1 with big
+        stacks."""
+        t0, w0 = sim_time.now(self), time.monotonic()
+
+        def expired():
+            return sim_time.now(self) - t0 >= timeout or \
+                time.monotonic() - w0 >= 10.0 * timeout + 30.0
+        while not expired():
             if self.robot_over_station() or self.info is None:
                 time.sleep(0.1)
                 continue
-            t_req = self.get_clock().now().nanoseconds * 1e-9
-            while time.monotonic() - t_wall < timeout:
+            t_req = sim_time.now(self)
+            while not expired():
                 with self.lock:
                     fresh = [d for t, d in self.frames if t >= t_req]
                 if len(fresh) >= self.n_frames:
@@ -328,9 +334,9 @@ class PalletPerception(Node):
     def monitor(self):
         if self.frame is None or not self.records:
             return
-        # a short window (n frames need n / rate s of sim time; RTF < 1 stretches that):
-        # gives up quickly when the arm is in the view
-        view = self.acquire(3.0 * (self.n_frames + 2) / self.cell['pallet_camera']['rate'])
+        # a short window (n frames need n / rate s of sim time): gives up quickly when the
+        # arm is in the view
+        view = self.acquire(2.0 * (self.n_frames + 2) / self.cell['pallet_camera']['rate'])
         if view is None:
             return
         _, P = view

@@ -12,7 +12,6 @@ Service: /perception/detect_box (DetectBox) - averages `perception.frames` fresh
 
 import math
 import threading
-import time
 
 import numpy as np
 import rclpy
@@ -32,7 +31,7 @@ from tf2_ros import Buffer, TransformListener
 
 from palletizer_perception import debug_view as dv
 from palletizer_perception.detector import BoxDetector
-from palletizer_tools import cell_config
+from palletizer_tools import cell_config, sim_time
 
 
 class BoxPerception(Node):
@@ -134,16 +133,17 @@ class BoxPerception(Node):
             return False, f'robot in the camera view ({link} over the pick zone)', DetectedBox()
         # Fresh = rendered after this request (header stamp, sim time). Arrival time is not
         # enough: frames queued while the node was busy would show the box still moving.
-        t_req = self.get_clock().now().nanoseconds * 1e-9
-        t_wall = time.monotonic()
-        while time.monotonic() - t_wall < self.timeout:
+        t_req = sim_time.now(self)
+
+        def have():
             with self.lock:
-                fresh = [d for t, d in self.frames if t >= t_req]
-            if len(fresh) >= self.n_frames and self.info is not None:
-                break
-            time.sleep(0.02)
-        else:
+                return sum(1 for t, _ in self.frames if t >= t_req) >= self.n_frames and \
+                    self.info is not None
+        # timeout in sim time (the RTF can drop far below 1 with big stacks)
+        if not sim_time.wait(self, have, self.timeout, period=0.02):
             return False, 'no fresh depth frames', DetectedBox()
+        with self.lock:
+            fresh = [d for t, d in self.frames if t >= t_req]
 
         info = self.info
         self.det.set_intrinsics(info.k, info.width, info.height)

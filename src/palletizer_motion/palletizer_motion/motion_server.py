@@ -32,7 +32,7 @@ from std_srvs.srv import Trigger
 
 from palletizer_motion.moveit_client import JOINTS, MoveItClient, box_object, make_pose
 from palletizer_motion.scene import static_objects
-from palletizer_tools import cell_config
+from palletizer_tools import cell_config, sim_time
 from palletizer_tools.ur_ik import LOWER, UPPER, UrKinematics
 
 G = 9.81
@@ -128,8 +128,12 @@ class MotionServer(Node):
         self.get_logger().info(f'static planning scene applied: {ok}; motion_server ready')
 
     def have_joints(self, timeout=30.0):
-        """Wait for joint states (the controllers can come up after this node)."""
-        return self.wait_for(lambda: self.joints is not None, timeout)
+        """Wait for joint states (the controllers can come up after this node; wall time:
+        the sim clock may not run yet)."""
+        end = time.monotonic() + timeout
+        while self.joints is None and time.monotonic() < end:
+            time.sleep(0.05)
+        return self.joints is not None
 
     def accept_goal(self, goal):
         return GoalResponse.ACCEPT if not self.busy.locked() else GoalResponse.REJECT
@@ -137,15 +141,13 @@ class MotionServer(Node):
     # ------------------------------------------------------------------ helpers
     def mean_fz(self, window):
         """Mean force over the next `window` s of sim time (by measurement stamps)."""
-        t0 = self.get_clock().now().nanoseconds * 1e-9
+        t0 = sim_time.now(self)
         t1 = t0 + window
-        end = time.monotonic() + window + 3.0
 
         def latest():
             with self.lock:
                 return self.wrench[-1][0] if self.wrench else 0.0
-        while latest() < t1 and time.monotonic() < end:
-            time.sleep(0.01)
+        sim_time.wait(self, lambda: latest() >= t1, window + 1.0)
         with self.lock:
             vals = [f for t, f in self.wrench if t0 <= t <= t1]
         return float(np.mean(vals)) if vals else None
@@ -163,12 +165,8 @@ class MotionServer(Node):
         return response
 
     def wait_for(self, cond, timeout):
-        end = time.monotonic() + timeout
-        while time.monotonic() < end:
-            if cond():
-                return True
-            time.sleep(0.01)
-        return cond()
+        """Wait up to `timeout` s of sim time (see palletizer_tools.sim_time)."""
+        return sim_time.wait(self, cond, timeout)
 
     def ptp(self, q):
         return self.mv.move_joints(q, self.m['ptp_velocity_scaling'],
@@ -179,13 +177,15 @@ class MotionServer(Node):
         v = self.m['lin_slow_velocity_scaling'] if slow else self.m['lin_velocity_scaling']
         a = self.m['lin_acceleration_scaling']
         ok, msg = self.mv.move_lin(xyz, tool_quat(yaw), v, a, self.m['planning_time'])
-        fb_v, fb_a = self.m['lin_fallback_scaling']
-        if not ok and 'error code -1' in msg and (v > fb_v or a > fb_a):
-            # Pilz rejects a Cartesian path whose IK exceeds a joint limit (fast LIN near a
-            # wrist configuration change): plan the same line slower
-            self.get_logger().info(f'LIN at {v:.2f}/{a:.2f} failed ({msg}), retrying slower')
-            ok, msg = self.mv.move_lin(xyz, tool_quat(yaw), min(v, fb_v), min(a, fb_a),
-                                       self.m['planning_time'])
+        for fb_v, fb_a in self.m['lin_fallback_scaling']:
+            if ok or 'error code -1' not in msg or (v <= fb_v and a <= fb_a):
+                continue
+            # Pilz rejects a Cartesian path whose IK exceeds a joint limit (a fast LIN near a
+            # wrist reconfiguration, or with the arm nearly stretched): the same line, slower
+            self.get_logger().info(f'LIN at {v:.2f}/{a:.2f} failed ({msg}), retrying at '
+                                   f'{min(v, fb_v):.2f}/{min(a, fb_a):.2f}')
+            v, a = min(v, fb_v), min(a, fb_a)
+            ok, msg = self.mv.move_lin(xyz, tool_quat(yaw), v, a, self.m['planning_time'])
         return ok, msg
 
     def descend(self, xyz, yaw):
@@ -347,7 +347,7 @@ class MotionServer(Node):
             self.mv.remove_objects(['target_box'])
             self.go_park()
             return self._fail(res, 'PLAN_FAILED', f'pre-grasp: {msg}')
-        time.sleep(m['weigh_settle'])
+        sim_time.sleep(self, m['weigh_settle'])
         tare = self.mean_fz(m['weigh_window'])
         self.tare_fz = tare
 
@@ -411,7 +411,7 @@ class MotionServer(Node):
             return self._fail(res, 'LOST_GRASP', 'box dropped during lift')
 
         self.feedback(gh, PickBox, 'weigh', 0.9)
-        time.sleep(m['weigh_settle'])
+        sim_time.sleep(self, m['weigh_settle'])
         fz = self.mean_fz(m['weigh_window'])
         res.measured_mass = (fz - tare) / G if fz is not None and tare is not None else 0.0
         res.sim_model_name = self.attached_name
@@ -585,7 +585,7 @@ class MotionServer(Node):
             return self._fail(res, 'RELEASE_FAILED', 'suction did not release')
         self.mv.detach_and_remove('held_box')
         self.held = None
-        time.sleep(m['release_settle'])
+        sim_time.sleep(self, m['release_settle'])
 
         self.feedback(gh, PlaceBox, 'retreat', 0.8)
         tcp_now = self.kin.fk(self.joints)[:3, 3]

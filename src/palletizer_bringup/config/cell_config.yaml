@@ -172,8 +172,9 @@ motion:
   lin_velocity_scaling: 0.6        # of pilz cartesian limits (1.0 m/s)
   lin_acceleration_scaling: 0.45
   lin_slow_velocity_scaling: 0.1   # last approach centimetres (descent into contact / release)
-  lin_fallback_scaling: [0.25, 0.25]  # velocity/acceleration when the fast LIN plan exceeds a
-                                   # joint limit (Pilz error -1): the same line, slower
+  lin_fallback_scaling: [[0.25, 0.25], [0.1, 0.1]]  # velocity/acceleration, in turn, when a
+                                   # LIN plan exceeds a joint limit (Pilz error -1): the same
+                                   # line, slower (0.1: arm nearly stretched at far top corners)
   slow_zone: 0.03                  # [m] length of the slow final approach
   pre_grasp_height: 0.15           # above the detected top-face center
   pick_gap: 0.003                  # cup face this far above the top face when suction turns on

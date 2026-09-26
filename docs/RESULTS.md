@@ -142,8 +142,117 @@ Pallet EUR 1200 x 800 mm at the station centre, gap 5 mm.
 - Pattern search time: 0.1–1.4 s (300×200: 5 s with the PyBullet check of every layer); done
   once per pallet at its first box.
 
+## Single-SKU pallets (acceptance runs)
+
+`ros2 run palletizer_orchestrator sku_runs` (seed 1: every run gets the same first pallet, an
+EUR delivered 18 mm closer to the robot than the station centre at −1.06°). "Used / layer" is
+layer A / B of the chosen pattern; "Pattern" is the count after the reachability map and the
+stack-aware motion check; "Optimum / layer" is the best count on the measured deck alone.
+Volume fill % = placed box volume / (deck area × usable height for this pallet and SKU).
+
 <!-- SKU_RUNS:BEGIN -->
+
+One pallet per SKU on EUR (fresh headless simulation each), then the exchange and the first box of the next pallet. Everything in the table is what the robot measured / decided, except the last columns (ground truth, evaluation). Raw data: `results/sku_*`.
+
+| SKU | Carton (measured) [mm] | Pallet (measured) [mm] | Optimum / layer | Used / layer (A / B) | Layers | Pattern | Boxes placed | Volume fill % | Picks / min (pallet · steady) | End | Next pallet | Collapses (GT) | Stack events (detected) | Cam vs GT placement max [mm] | RTF |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 600x400x400 | 594 x 394 x 400 (600x400x400) | 1196 x 800 | 4 | 4/4 | 2 | 8 | 8 | 68.0 | 4.26 · 4.55 | PATTERN_COMPLETE | started | 0 | 0 | 0.08 | 0.84 |
+| 600x400x300 | 594 x 394 x 300 (600x400x300) | 1196 x 800 | 4 | 4/4 | 3 | 12 | 12 | 76.5 | 4.56 · 4.73 | PATTERN_COMPLETE | started | 0 | 0 | 0.15 | 0.71 |
+| 400x300x300 | 394 x 294 x 300 (400x300x300) | 1196 x 800 | 8 | 7/7 | 3 | 21 | 21 | 69.3 | 4.72 · 4.84 | PATTERN_COMPLETE | started | 0 | 0 | 0.58 | 0.59 |
+| 400x300x200 | 394 x 294 x 200 (400x300x200) | 1196 x 800 | 8 | 7/7 | 5 | 32 | 32 | 70.4 | 4.77 · 4.98 | PATTERN_COMPLETE | started | 0 | 0 | 0.57 | 0.45 |
+| 300x200x200 | 294 x 194 x 200 (300x200x200) | 1196 x 800 | 16 | 15/15 | 5 | 68 | 68 | 77.2 | 4.89 · 5.04 | PATTERN_COMPLETE | started | 0 | 0 | 0.67 | 0.37 |
+| 500x300x250 | 494 x 294 x 250 (500x300x250) | 1196 x 800 | 6 | 6/6 | 4 | 21 | 21 | 72.4 | 4.77 · 4.99 | PATTERN_COMPLETE | started | 0 | 0 | 0.56 | 0.35 |
+| 450x350x300 | 450 x 350 x 300 (450x350x300) | 1196 x 800 | 4 | 4/4 | 3 | 12 | 12 | 51.5 | 4.57 · 4.74 | PATTERN_COMPLETE | started | 0 | 0 | 0.10 | 0.66 |
+| 520x320x250 | 520 x 320 x 250 (520x320x250) | 1196 x 800 | 4 | 4/4 | 4 | 15 | 15 | 56.7 | 4.62 · 4.85 | PATTERN_COMPLETE | started | 0 | 0 | 0.45 | 0.37 |
+| 380x280x220 | 380 x 280 x 220 (380x280x220) | 1196 x 800 | 8 | 8/8 | 4 | 31 | 31 | 68.9 | 4.81 · 4.96 | PATTERN_COMPLETE | started | 0 | 0 | 0.50 | 0.51 |
+| skuchange | 394 x 294 x 200 | 1196 x 800 | 8 | 7/7 | 5 | 32 | 10 | 22.0 | 4.06 · 4.53 | SKU_CHANGE | started | 0 | 0 | 0.49 | 0.84 |
+
 <!-- SKU_RUNS:END -->
+
+### SKU change, unknown SKU / pallet, interlock priority
+
+<!-- EXTRA_RUNS:BEGIN -->
+(filled in from the runs)
+<!-- EXTRA_RUNS:END -->
+
+## Milestone D — Pallet-full decision and exchange handshake
+
+- The orchestrator decides FULL itself. After every commit the BT condition `PalletFull`
+  checks for PATTERN_COMPLETE (placed = pattern count) or an operator request (`/pallet/close` →
+  OPERATOR). Before a pick, a pre-check that fails on a started pallet closes it with the
+  planner's reason: SKU_CHANGE, HEIGHT_LIMIT or NO_FEASIBLE_PLACEMENT (a place that fails twice
+  on the same slot also closes it). ClosePallet = Park → verify the last placement →
+  `FinishPallet` (PalletReport, `/pallet/status` FULL + reason) → NewPallet.
+- NewPallet = Park → forget the old pallet (perception, packing, planning scene) → EXCHANGING →
+  `/pallet_exchange` (PalletExchange: feedback phases "full pallet out (n boxes)", "remove",
+  "spawn new pallet", "new pallet in") → READY → `measure_pallet` (retry ×3) → `set_pallet` to
+  packing and the motion scene → EMPTY. The first box sets IN_PROGRESS.
+- `pallet_exchanger` (plant): the full pallet and every box on it slide out along +x on the
+  pallet lane (PalletMover gz system: all models teleported rigidly together every physics
+  step, trapezoidal profile 0.35 m/s), are removed, a new pallet of the next type in the order
+  slides in from −x and stops at the station centre ± 2 cm / ± 1.5°. `exchange_mode:=operator`
+  waits for `/pallet/confirm_exchange`.
+- `test_pallet_mover` (sim): a dropped box rests on the deck (the pallet's collision moved with
+  it); between exchanges the boxes are **free physics bodies** (a box overhanging the edge tips
+  over; a shoved box stays shoved); during an exchange a box rides rigidly with its pallet (max
+  deviation 0.0 mm, poses compared at equal sim stamps), then both are removed; the new pallet
+  carries boxes; operator mode waits for the confirmation, then completes.
+- Every SKU run above ends with FULL + reason, the exchange, the new pallet measured, and the
+  first box of the next pallet placed ("Next pallet: started").
+- RViz: `/pallet/overlay` (rviz_2d_overlay_plugins TextOverlay, `status_overlay` node) shows
+  pallet id, state, measured pallet and SKU, boxes placed / pattern count, layer, fill %,
+  stack events and reason.
+
+## Milestone F — Speed
+
+Picks per minute in sim time over each pallet (from the pallet's measurement to its last
+placement, including the first box's trip along the conveyor), and steady state (first to last
+placement): **4.26–4.81 picks/min per pallet, 4.55–5.02 steady**, all single-SKU pallets above
+(v1 mixed: 1.77 heuristic / 2.12 naive). Collapses: 0 (ground truth) and 0 stack events
+(perception) on every pallet.
+
+| Change | Effect (per cycle, sim time) |
+|---|---|
+| Plan while the arm picks: BT `Parallel[Pick ‖ VerifyPlacement(previous) → PlanPlacement]`; after the pick only a re-check with the measured mass (µs) | planning (pattern slot + motion validation, 0.1–0.5 s; mixed heuristic 1–4 s) and the pallet-camera verification (~2 s) are off the critical path |
+| Pre-check (before the pick) without motion validation in pattern mode | −0.1…0.3 s |
+| Straight PTP to the pre-grasp pose (hub only as a fallback); lift straight up to hub height and swing directly to above the target (no pallet-side hub) | −2 PTPs, ≈ −4 s |
+| PTP scaling 0.6 / 0.4 → 1.0 / 1.0 (joint accelerations stay within the 3 rad/s² of `joint_limits.yaml`) | swings ≈ −40 % |
+| LIN 0.25 → 0.6 m/s (acc 0.45), re-planned at 0.25 and 0.1 when Pilz reports a joint-limit violation | vertical moves ≈ −50 % |
+| Place descent: one LIN through pre-place (was LIN to pre-place + LIN) | −1 plan + accel/decel |
+| F/T settle + window 0.3 + 0.4 → 0.15 + 0.25 s (weigh by message stamps); release settle 0.4 → 0.15 s | −0.8 s |
+| Conveyor detection refuses only if the tool is over the ROI or something higher than a box is in view (was: any arm link origin): no park + re-detect after near-row places | −3 s on those cycles |
+
+Cycle before / after (600×400×400, one cycle, sim time): 27 s → 13 s. The sim's real-time
+factor falls as the stack grows (see below); picks/min are in sim time, so they are not
+affected, but wall-clock durations are.
+
+**Simulation speed.** RTF with the two cameras and an empty cell ≈ 0.9 (CPU-bound, headless);
+with stacked boxes (measured by spawning a 5-layer 300×200 stack): 16 boxes 0.89, 32 0.78, 48
+0.51, 64 0.36, 80 0.25. A stack is one DART contact island (one LCP); the bullet collision
+detector, the PGS solver and max_contacts 4 gave no gain (PGS was 3× slower), so the runs use the
+defaults at a requested RTF of 1.0 (> 1 is not reachable on this machine). The measured RTF per
+pallet is in the table.
+
+## v2 test changes
+
+v0 / v1 tests still pass; the ones that relied on the old behaviour were updated, none deleted:
+- `test_core.py::test_real_reachability_map`: the map is now world-frame over the station area;
+  the test looks it up through `PalletReach` for an EUR pallet at the station and checks the v1
+  facts (usable height 1.05 m, far top corners, pedestal keep-out). `PalletSpec.from_config` is
+  gone (the pallet is measured): `PalletSpec.measured`.
+- `test_suction.py`: `sim.home()` now goes to the park pose (the old home hangs over the pallet
+  station, in the pallet camera's view).
+- `pick_place_test`: the "pallet swap" is a pallet exchange + measurement (the old
+  `/sim/clear_pallet` forklift is gone); placements are also verified by the pallet camera
+  during the next pick, like the BT, and the camera error is compared with ground truth.
+- `eval_perception`: the mixed-box distribution moved to `spawner.mixed`.
+- `run_all.sh`: + `test_no_hardcoding` (no sim) and `test_pallet_mover`.
+- `palletizer_perception/test/conftest.py`: only the sim script is excluded from collection, so
+  the new synthetic-depth unit tests run with plain pytest.
+- Packing core: a footprint covers a 1 cm cell only if it overlaps it by > 3 mm (so a 5 mm
+  pattern gap never shares a cell), and the rest height also checks exact record overlaps (the
+  first version with only the tolerance let a 4 mm overlap through in the mixed-packing test).
+
 
 # v1 results
 

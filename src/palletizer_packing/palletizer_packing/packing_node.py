@@ -42,7 +42,7 @@ from palletizer_packing.core.perceived import merge
 from palletizer_packing.core.planners import make_planner
 from palletizer_packing.core.reach import PalletReach, ReachabilityMap
 from palletizer_packing.core.rules import RuleConfig, stability
-from palletizer_tools import cell_config
+from palletizer_tools import cell_config, sim_time
 from palletizer_tools.pallet_frame import PalletFrame
 
 LATCHED = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL,
@@ -210,19 +210,20 @@ class PackingNode(Node):
         if not self.cell['packing']['perception_merge']:
             return self.state
         n = len(self.state.boxes)
-        end = time.monotonic() + (float(self.cell['packing']['map_wait']) if wait else 0.0)
-        while True:
+
+        def fresh():
             m = self.current_map()
-            if m is not None and m.placements >= n:
-                break
-            if not wait:
-                return self.state
-            if time.monotonic() > end:
+            return m is not None and m.placements >= n
+        if wait:
+            sim_time.wait(self, fresh, float(self.cell['packing']['map_wait']), period=0.05)
+        if not fresh():
+            if wait:
+                m = self.current_map()
                 self.get_logger().warn(
                     f'no perceived height map with {n} placements '
                     f'({"none" if m is None else m.placements}): planning on the record')
-                return self.state
-            time.sleep(0.05)
+            return self.state
+        m = self.current_map()
         H = np.array(m.data, dtype=float).reshape(m.rows, m.cols)
         rec = self.state.height
         if H.shape != rec.shape:
