@@ -1,46 +1,61 @@
 # Palletizer — project context
 
 ROS 2 Jazzy + Gazebo Harmonic (gz-sim 8) portfolio project: an autonomous palletizing cell.
-A UR10e with a suction gripper stands between a zone conveyor and a EUR pallet. Random boxes
-arrive on the conveyor; an overhead RGB-D camera measures each box; a packing planner picks a
-stable spot; MoveIt 2 picks at the top-face center and places; a BehaviorTree runs the loop.
-Results and acceptance numbers: `docs/RESULTS.md`.
+A UR10e with a suction gripper stands between a zone conveyor and a pallet station fed by a
+pallet conveyor. Boxes arrive on the conveyor; an overhead RGB-D camera measures each box; a
+second overhead RGB-D camera measures each delivered pallet, the stack and every placement;
+a packing planner (single-SKU layer patterns or v1 mixed planners) picks the target; MoveIt 2
+picks at the top-face center and places; a BehaviorTree runs the loop and the pallet-exchange
+handshake. Results and acceptance numbers: `docs/RESULTS.md`.
 
 ## Phases
 - **v0 (done)**: workspace, robot description, world, runtime suction plugin, spawner, conveyor, tests.
-- **v1 (done)**: A spawner/world (photo-eye zones, depth noise, F/T), B perception,
-  C MoveIt pick & place + reachability map, D packing (core + ROS), E orchestrator + metrics + benchmark.
+- **v1 (done)**: spawner/world, box perception, MoveIt pick & place + reachability map, packing
+  (core + ROS), orchestrator + metrics + benchmark (mixed random boxes).
+- **v2 (done)**: A SKU catalog + sku/order spawner, B pallet station + pallet perception
+  (measured pallet, perceived height map, placement check, stack monitoring), C single-SKU
+  pattern planner, D pallet-full decision + PalletExchange handshake + PalletStatus, E RViz
+  debug images, F speed (planning in parallel with the pick, ≥ 4 picks/min).
 - Next: RL planner on `palletizer_packing.core.env.PalletizingEnv` (built + tested, not trained).
 
 ## Ground rules
-- Ground truth (`/sim/box_poses`, `/sim/box_specs`) is ONLY for evaluation/tests, the collapse
-  detector (metrics_logger), and simulated plant equipment (box_spawner = upstream process,
-  sim_ops = reject pusher / forklift). Never an input to perception, planning or control.
+- **Nothing about boxes or pallets is configured into the robot.** Decision-making (perception,
+  packing, motion, orchestrator) loads the config with `cell_config.load(role='robot')`, which
+  strips the plant-only sections `spawner` (SKU catalog, mixed distribution) and `exchanger`
+  (pallet types). Box dims come from box perception, pallet dims / pose / deck height from
+  pallet perception. The config holds only mounting poses, the pallet station AREA, tolerances
+  and limits. Checked by `src/palletizer_tools/test/test_no_hardcoding.py`.
+- Ground truth (`/sim/box_poses`, `/sim/box_specs`, `/sim/pallet_poses`) is ONLY for evaluation /
+  tests (metrics_logger: collapse detector + placement check evaluation, eval scripts) and for
+  simulated plant equipment (box_spawner = upstream process, pallet_exchanger = pallet conveyor,
+  sim_ops = reject pusher). Never an input to perception, planning or control. Collapse
+  detection and placement verification for the robot are done by pallet_perception.
 - All geometry and tunables live in `palletizer_bringup/config/cell_config.yaml`. Acceptance
-  thresholds (`perception_eval`, `pick_place_test`) are never loosened.
+  thresholds (`perception_eval`, `pallet_perception_eval`, `pick_place_test`) are never loosened.
+- Everything runs headless by default (`gui:=false`, 8 GB VRAM laptop); GUI only for the demo.
 - Python deps not in apt (pybullet, gymnasium) live in `.venv` (requirements.txt, numpy pinned
   to the apt version); only `palletizer_packing` imports them. ament_python packages set
   `[build_scripts] executable = /usr/bin/env python3` so `ros2 run` uses the venv python.
 - Source order everywhere: `/opt/ros/jazzy/setup.bash` → `.venv/bin/activate` →
   `install/setup.bash`. Build with `python -m colcon build` (venv active).
-- Commit after each working milestone. Keep this file and README.md current.
+- Commit after each working milestone. Keep this file, README.md and docs/RESULTS.md current.
 
 ## Packages (`src/`)
 | Package | Type | Role |
 |---|---|---|
-| `palletizer_bringup` | cmake | `config/cell_config.yaml`, `launch/palletizer.launch.py` (`mode:=manual\|auto`) |
-| `palletizer_description` | cmake | UR10e (official macro) on 0.7 m pedestal + suction gripper, F/T sensor on `suction_cup_joint`, gz_ros2_control |
-| `palletizer_gazebo` | cmake, C++ | world xacro, `SuctionGripper` + `ModelPosePublisher` gz systems, bridge, `sim.launch.py` (`gui`, `rviz`, `rtf`) |
-| `palletizer_interfaces` | cmake | msgs DetectedBox, Placement, BoxSpec, CycleReport, PalletReport; srvs DetectBox, PlanPlacement, CommitPlacement, Weigh; actions PickBox, PlaceBox |
-| `palletizer_tools` | python | box_spawner, conveyor_controller (photo-eyes), cloud_relay, sim_ops, `sim_client.py`, `ur_ik.py`, v0 tests |
-| `palletizer_perception` | python | `detector.py` (no ROS), `box_perception` node, `eval_perception`, touching test |
+| `palletizer_bringup` | cmake | `config/cell_config.yaml`, `launch/palletizer.launch.py` (`mode:=manual\|mixed\|single_sku`, `auto` = mixed) |
+| `palletizer_description` | cmake | UR10e (official macro) on 0.7 m pedestal + suction gripper, F/T sensor on `suction_cup_joint`, gz_ros2_control; starts at the park pose |
+| `palletizer_gazebo` | cmake, C++ | world xacro (no pallet: station markings, pallet lane, pallet camera), gz systems `SuctionGripper`, `ModelPosePublisher` (box_ + pallet_ GT), `PalletMover`; bridge; `sim.launch.py` (`gui`, `rviz`, `rtf`); `rviz/cell.rviz` |
+| `palletizer_interfaces` | cmake | msgs DetectedBox, Placement, BoxSpec, CycleReport, PalletReport, DetectedPallet, HeightMap, PlacementCheck, StackEvent, PackingState, PalletStatus; srvs DetectBox, PlanPlacement, CommitPlacement, Weigh, MeasurePallet, SetPallet, VerifyPlacement; actions PickBox, PlaceBox, PalletExchange |
+| `palletizer_tools` | python | box_spawner (sku / order / mixed), pallet_exchanger, conveyor_controller, cloud_relay, sim_ops, `pallet_frame.py`, `sim_client.py`, `ur_ik.py`, `cell_config.py` (role), sim tests |
+| `palletizer_perception` | python | `detector.py` + `box_perception` (conveyor), `pallet_detector.py` + `pallet_perception` (pallet station), `camera_model.py`, `debug_view.py`; `eval_perception`, `eval_pallet_perception` |
 | `palletizer_moveit_config` | cmake | SRDF (group `manipulator` base_link→suction_tcp), Pilz PTP/LIN + OMPL, `move_group.launch.py` |
-| `palletizer_motion` | python | `motion_server` (PickBox/PlaceBox actions, scene, weigh), `moveit_client.py` (no moveit_py), `reachability.py` + `config/reachability_ur10e.npz` |
-| `palletizer_packing` | python | `core/` (NO ROS: pallet, rules, planners, physics [pybullet], env [gymnasium], reach) + `packing_node`; pytest in `test/` |
-| `palletizer_orchestrator` | cmake, C++ + python | BT.CPP v4 `orchestrator` + `trees/palletize.xml`, `metrics_logger` (+ collapse detector), `pick_place_test`, `benchmark` |
+| `palletizer_motion` | python | `motion_server` (PickBox/PlaceBox, scene incl. measured pallet, weigh, check_placement), `moveit_client.py`, `reachability.py` + `config/reachability_ur10e.npz` (world frame, station area) |
+| `palletizer_packing` | python | `core/` (NO ROS: pallet, rules, planners, pattern, perceived, physics [pybullet], env [gymnasium], reach) + `packing_node`, `pattern_report`; pytest in `test/` |
+| `palletizer_orchestrator` | cmake, C++ + python | BT.CPP v4 `orchestrator` + `trees/palletize.xml`, `status_overlay`, `metrics_logger` (GT evaluation), `pick_place_test`, `benchmark`, `sku_runs` |
 
 ## Cell layout (world = floor under the robot base axis; +x = conveyor travel)
-- UR10e `base_link` at (0, 0, 0.70) on a 0.25×0.25×0.70 m pedestal (0.5 m can't reach the stack corners).
+- UR10e `base_link` at (0, 0, 0.70) on a 0.25×0.25×0.70 m pedestal.
 - Conveyor 3.0×0.6 m belt, centerline y = 0.80, top z = 0.80, x ∈ [−2.55, 0.45], three driven zones
   infeed [−2.55, −1.55] / accum [−1.55, −0.65] / pick [−0.65, 0.45] with photo-eyes at x = −1.60 / −0.70 / 0.25.
   Boxes stop with their leading edge at the pick eye → centers in x ∈ [−0.15, 0.15].
@@ -50,94 +65,129 @@ Results and acceptance numbers: `docs/RESULTS.md`.
   range count as blocked (overhanging boxes), eye posts 0.12 m outside the belt, transit
   watchdog as a safety net. The pick zone never runs while its eye is blocked (`resume` only
   clears the hold).
-- Pallet EUR 1.2×0.8×0.144 centered (0, −0.60). Pallet frame for packing: u = x + 0.6,
-  v = −0.2 − y (0 at the robot-side edge, 0.8 at the far edge), z above the pallet top.
-- Camera (0, 0.80, 2.30) looking down, 640×480 @ 15 Hz, hfov 1.2, depth noise σ = 2 mm.
-- Home/park joints [−π/2, −π/2, π/2, −π/2, −π/2, 0]: arm over the pallet side, out of the camera view.
+- Pallet station: AREA 1.32×0.92 m centred (0, −0.60) (all the robot knows). Pallet lane along +x at
+  y = −0.60: a new pallet enters from x = −2.9, a full one leaves to x = +2.9 (PalletMover,
+  0.35 m/s). Delivered pose = station centre ± 2 cm, ± 1.5° (inside the reachability map).
+  Pallet types (exchanger only): EUR 1200×800, 1000×800, HALF 800×600, deck 0.144.
+- Pallet frame (measured): origin = deck corner nearest the robot on the −u side, v = pallet axis
+  pointing away from the robot, u = v rotated +90° (EUR at the station: u ≈ +x, v ≈ −y), z above
+  the measured deck. TF `pallet_frame` (x = u, y = −v).
+- Conveyor camera (0, 0.80, 2.30) looking down, 640×480 @ 15 Hz, hfov 1.2, depth noise σ = 2 mm.
+- Pallet camera (0, −0.60, 2.80) looking down, image x along +x, 800×600 @ 5 Hz, hfov 0.9
+  (~3.2 mm/pixel at the deck), σ = 2 mm; mast at (0, −1.55), outside the lane.
+- `robot.home` [−π/2, −π/2, π/2, −π/2, −π/2, 0] is only the IK seed (pan rotated to each target);
+  `robot.park` (TCP at (0.35, 0.08, 1.65)) is the start / park pose, outside both camera views and
+  high enough for a carried box to clear a full pallet leaving the station.
 
-## Data flow (auto mode)
+## Data flow (mode single_sku / mixed)
 ```
 conveyor_controller --box_ready--> orchestrator (BT) --DetectBox--> box_perception
-                                        |--PlanPlacement(check_only)--> packing_node
-                                        |--PickBox--> motion_server --MoveGroup/scene--> move_group --> JTC
-                                        |--ResumeConveyor
-                                        |--PlanPlacement(mass) / PlaceBox / Weigh(verify)
-                                        |--CommitPlacement--> packing_node + motion_server scene
-                                        `--CycleReport/PalletReport--> metrics_logger (+ GT) --> results/*.csv
+                                        |--PlanPlacement(check_only)--> packing_node (SKU? slot?)
+                                        |--[ PickBox --> motion_server --> move_group --> JTC
+                                        |    || VerifyPlacement(prev) --> pallet_perception
+                                        |    || PlanPlacement --> packing_node (perceived map) ]
+                                        |--ResumeConveyor, PlanPlacement(recheck, mass), PlaceBox, Weigh
+                                        |--CommitPlacement--> packing_node + motion scene
+                                        |--PalletFull? --> Park, FinishPallet (FULL) --> PalletExchange
+                                        |      --> pallet_exchanger (PalletMover) --> MeasurePallet
+                                        |      --> SetPallet (packing, motion scene) --> EMPTY
+                                        `--CycleReport/PalletReport/PalletStatus--> metrics_logger (+ GT)
+pallet_perception: /pallet_perception/height_map --> packing_node; stack_events --> orchestrator
 ```
 
 ## Interfaces
 | Name | Type | Notes |
 |---|---|---|
-| `/perception/detect_box` | DetectBox | averages 5 fresh depth frames; fails if a robot link is over the ROI (TF) |
-| `/perception/detected_box`, `/perception/markers` | DetectedBox / MarkerArray | auto-published on the box_ready rising edge |
-| `/packing/plan_placement`, `/packing/commit`, `/packing/reset` | PlanPlacement / CommitPlacement / Trigger | model updated from the *commanded* placement |
-| `/packing/markers`, `/packing/state` | MarkerArray (height map + ghost) / String JSON | |
+| `/perception/detect_box` | DetectBox | averages 5 fresh depth frames; refuses if the tool (TF) is over the ROI or any pixel over the ROI is higher than a box can be |
+| `/perception/detected_box`, `/perception/markers`, `/perception/debug_image` | DetectedBox / MarkerArray / Image | debug image rendered only while subscribed |
+| `/pallet_perception/measure_pallet` | MeasurePallet | empty pallet → DetectedPallet (size_u, size_v, deck_z, centre, origin, yaw); resets the stack model |
+| `/pallet_perception/verify_placement` | VerifyPlacement | placement by change detection → PlacementCheck (+ topic `placement_check`) |
+| `/pallet_perception/reset` | Trigger | pallet gone |
+| `/pallet_perception/pallet`, `/pallet_perception/height_map` | DetectedPallet / HeightMap | transient local; map rows = v, cols = u, NaN = unobserved |
+| `/pallet_perception/stack_events` | StackEvent | SHIFT (> 20 mm) / COLLAPSE, from continuous monitoring |
+| `/pallet_perception/debug_image`, `/pallet_perception/markers` | Image / MarkerArray | outline, measured tops, next-target ghost, height-map inset |
+| `/packing/plan_placement`, `/packing/commit`, `/packing/reset`, `/packing/set_pallet` | PlanPlacement / CommitPlacement / Trigger / SetPallet | responses carry PackingState; plan failure `reason` |
+| `/packing/status`, `/packing/next_target`, `/packing/markers`, `/packing/state` | PackingState / Placement / MarkerArray / String | |
 | `/motion/pick`, `/motion/place` | PickBox / PlaceBox actions | feedback: phase, progress |
-| `/motion/park`, `/motion/drop_held`, `/motion/scene/add_placed`, `/motion/scene/clear_placed` | Trigger / CommitPlacement | |
-| `/suction/weigh` | Weigh | tare / mass from `/suction/wrench` |
+| `/motion/park`, `/motion/drop_held`, `/motion/check_placement`, `/motion/scene/{add_placed,clear_placed,set_pallet}` | Trigger / CommitPlacement / SetPallet | |
+| `/suction/weigh` | Weigh | tare / mass from `/suction/wrench` (averaged by sim-time stamps) |
+| `/pallet_exchange` | PalletExchange action | pallet_exchanger; `exchange_mode` auto / operator |
+| `/pallet/confirm_exchange` (exchanger), `/pallet/close` (orchestrator) | Trigger | operator |
+| `/pallet/status` | PalletStatus | transient local; EMPTY, IN_PROGRESS, FULL, EXCHANGING, READY + reason |
+| `/pallet/overlay` | rviz_2d_overlay_msgs/OverlayText | status_overlay |
 | `/conveyor_controller/{resume,stop}`, `.../box_ready`, `.../running`, `.../eyes` | Trigger / Bool / String | |
-| `/conveyor/<zone>/cmd_vel`, `/conveyor/<zone>/eye` | Float64 / LaserScan | zones infeed, accum, pick |
-| `/sim/reject_pick_zone_box`, `/sim/reject_held_box`, `/sim/clear_pallet` | Trigger | simulated equipment (sim_ops) |
+| `/sim/reject_pick_zone_box`, `/sim/reject_held_box` | Trigger | simulated equipment (sim_ops) |
+| `/sim/pallet_mover/{cmd,state}` | String | PalletMover gz system (pallet_exchanger only) |
 | `/orchestrator/cycle_report`, `/orchestrator/pallet_report` | CycleReport / PalletReport | |
-| `/sim/box_poses`, `/sim/box_specs` | TFMessage / BoxSpec | GROUND TRUTH, evaluation only |
-| `/suction/cmd`, `/suction/grasped`, `/suction/attached_model`, `/suction/wrench` | Bool / Bool / String / WrenchStamped | |
-| `/overhead_camera/{image,depth_image,camera_info,points}` | | points in `overhead_camera_link` (re-stamped) |
+| `/sim/box_poses`, `/sim/box_specs`, `/sim/pallet_poses` | TFMessage / BoxSpec / TFMessage | GROUND TRUTH, evaluation / plant only |
 
 ## Key algorithms
-- **Perception** (`detector.py`): world back-projection (`camera.pixel_center_offset` 0.5 for gz),
+- **Box perception** (`detector.py`): world back-projection (`pixel_center_offset` 0.5 for gz),
   belt-plane subtraction in the ROI, top faces = connected regions on height plateaus; per face
   ray/plane intersection → minAreaRect (yaw) + second moments (L, W; unbiased w.r.t. pixels) +
-  centroid (grasp point). Merged equal-height faces split by RGB k-means, else declined (conf 0.2).
-- **Motion** (`motion_server.py`): pick = PTP hub at the pick bearing → PTP pre-grasp (0.15 m above)
-  → LIN down (slow last 3 cm) to a 3 mm gap → suction + confirm → attach collision box (shrunk
-  3 mm xy, 1.5 cm trimmed at the bottom) → LIN up → PTP up to lift height → weigh (F/T, tared before
-  the grasp) → PTP to the pallet-side hub (the conveyor can resume). Place = PTP to directly above
-  the target at hub height → LIN down to pre-place → LIN (slow last 3 cm) to 5 mm above the rest
-  surface → release + confirm → detach → LIN retreat. Swings go through the +x (downstream) side
-  via the pan 2π branch (`motion.swing_bearing`), so the carried box never passes over queued
-  boxes. Hub height clears the tallest committed stack. Every failure path parks the arm out of
-  the camera view. Grasp yaw = box yaw + k·π/2 and place yaw + k·π, chosen for minimal wrist
-  rotation; the grasp offset measured at pick is compensated at place. IK for joint goals:
-  `palletizer_tools/ur_ik.py` (numeric, joint limits); KDL inside Pilz LIN.
-- **Reachability map**: top-down IK + MoveIt collision validity for the pre-place and place poses on a
-  5 cm grid × box-top heights 0.15–1.20 m × yaw 0/90° (identical: yaw only moves wrist_3).
-  Near-field keep-out in front of the pedestal at low heights; **usable max stack height 1.05 m**
-  (box top above the pallet top), limited by the far top corners.
-- **Packing** (`core/`): 1 cm height map; candidates = 5 cm grid + contact points × {0°, 90°};
-  constraints: bounds (no overhang), max height (min(1.2, 1.05 from the map)), reachability map,
-  reach-over (stacks between the robot and the target ≤ rest + pre_place − 0.10). Stability: support
-  ≥ 0.75 within 5 mm, COM in the support hull, mass ≤ 1.5 × each supporting box. Naive = first
-  feasible in a far-to-near, left-to-right scan. Heuristic = DBL score (rest height, max-height
-  increase, far rows, left, side contact, roughness) + deck-area term + re-ranking that keeps a flat
-  region for a 0.5 m box; the top 3 are verified by PyBullet (1.5 s, ≤ 10 mm / 2°).
-  Both planners take an optional motion `validator` (the ROS wrapper plugs in
-  `/motion/check_placement`: IK + collision validity of release, pre-place, above-target and a
-  mid-LIN sample in the *current* scene), applied in ranked order, ≤ `packing.motion_check_max`
-  calls per plan. `PlanPlacement.exclude` skips targets that already failed in motion.
-- **Orchestrator** (`trees/palletize.xml`): Park → loop{MorePallets → Cycle}. Cycle: WaitBoxReady →
-  DetectBox (retry 3, else Park + reject) → pre-check fit (pallet full → PalletSwap) → PickBox (retry
-  once, else Park + reject) → ResumeConveyor → PlanPlacement with the measured mass (full → swap) →
-  PlaceBox + VerifyRelease (on failure re-plan excluding that target and place once more, else
-  reject the held box) → CommitPlacement → ReportCycle. DetectBox failure → Park → 3 retries
-  with 0.5 s delay → reject.
-  PalletSwap = FinishPallet (report) → ClearPallet → ResetPackingModel → ClearPlanningScene.
+  centroid (grasp point). Merged equal-height faces split by RGB k-means, else declined.
+- **Pallet perception** (`pallet_detector.py`): deck = highest large *flat* plateau in the station
+  area (flatness test rejects obliquely seen vertical faces, e.g. the pedestal), deck-board gaps
+  closed (10 cm), edge ring re-grown, rectangle by second moments → dims, centre, yaw, deck z;
+  frame axes assigned by the robot position. Height map: max of observed points per 1 cm cell
+  (NaN = occluded). Placement = pixels now at the commanded top height that were clearly lower
+  in the reference frame (works when same-height boxes touch), flat top pixels only, rectangle
+  fit → error vs commanded. Stack monitoring: per placed box, its visible top pixels (not dropped
+  / covered) + pixels that rose to its height next to it → centroid shift; > 20 mm SHIFT, most of
+  the top dropped COLLAPSE. Frames only with no robot link over the station (TF) and nothing
+  higher than a stack can be; placements announced by the cycle report are excluded until
+  verified.
+- **Motion** (`motion_server.py`): pick = PTP straight to pre-grasp (0.15 m above; via the hub at
+  the pick bearing only if that fails) → LIN down (slow last 3 cm) to a 3 mm gap → suction +
+  confirm → attach collision box → LIN up → PTP up to max(lift, hub) height (clears conveyor and
+  every stack) → weigh. Place = place poses (IK + collision check) → PTP to directly above the
+  target at hub height → one LIN down (slow last 3 cm) to 5 mm above the rest surface → release
+  + confirm → detach → LIN retreat. Fast LIN (0.6/0.45) retried at 0.25 when Pilz reports a
+  joint-limit violation. Swings via the +x side (canonical pan). Every failure parks the arm.
+- **Reachability map**: world-frame grid over the station area (5 cm, nodes symmetric about the
+  station centre), box-top z 0.25–1.45 m, top-down IK + MoveIt validity for pre-place and place
+  (station floor modelled as a slab up to `max_deck_z`). `PalletReach` intersects it with the
+  measured pallet: per-position lookup + usable stack height (EUR at the centre: 1.05 m, as v1).
+- **Packing core**: 1 cm height map, a footprint covers a cell if it overlaps it by > 3 mm (a
+  5 mm pattern gap never shares a cell) + exact record overlaps in the rest height. Rules as v1
+  (bounds, height, reachability, reach-over, support ≥ 0.75 within 5 mm, COM, mass ratio 1.5).
+  Planning state = record merged with the perceived map (perception wins on disagreements where
+  both are locally flat; logged). Mixed planners as v1; `reserve_footprint` is a planner
+  hyperparameter, not a box assumption.
+- **Pattern planner** (`core/pattern.py`): inflated boxes (L+gap, W+gap) on the inflated deck;
+  guillotine DP over normal sets + first-order non-guillotine (5-block) patterns → all layouts
+  with the best count (or best − `interlock_drop`); variants = mirrors × slack (centred / far);
+  slots filtered by the reachability map at every layer height; layer pair A/B chosen by
+  (count, interlock) or (interlock ≥ min, count, interlock) with `pattern_priority`, fast
+  support pre-filter, full static stability check of the whole pallet and PyBullet per layer.
+  Order within a layer: far side first. Runtime: SKU = first box (±10 mm), next slot checked on
+  the perceived state + motion validator; reasons PATTERN_COMPLETE / SKU_CHANGE / HEIGHT_LIMIT /
+  NO_FEASIBLE_PLACEMENT. Empty pallet + other box → new SKU.
+- **Orchestrator** (`trees/palletize.xml`): Park → NewPallet (Park, ResetPalletModels, PalletExchange,
+  MeasurePallet → SetPallet) → loop{MorePallets → Cycle}. Cycle: WaitBoxReady → DetectBox (Park +
+  3 retries, else reject) → pre-check (fails on a started pallet → ClosePallet(reason) + retry on
+  the new pallet; else reject) → Parallel[Pick (retry once / reject) ‖ VerifyPlacement(prev) +
+  PlanPlacement] → ResumeConveyor → recheck with measured mass (else ClosePallet while holding) →
+  PlaceBox + VerifyRelease (re-plan excluding the target; on a started pallet close it and place
+  on the next; else reject) → Commit → ReportCycle → PalletFull? (PATTERN_COMPLETE / OPERATOR) →
+  ClosePallet. ClosePallet = Park, VerifyPlacement, FinishPallet (FULL + report), NewPallet.
   Groot2 on port 1667.
 
 ## Build / run / test
 See README.md for the command list. Key entry points:
-`ros2 launch palletizer_bringup palletizer.launch.py mode:=auto planner:=heuristic`,
+`ros2 launch palletizer_bringup palletizer.launch.py mode:=single_sku sku:=400x300x300`,
 `src/palletizer_tools/test/run_all.sh`, `python -m pytest src/palletizer_packing/test`,
-`ros2 run palletizer_perception eval_perception`, `ros2 run palletizer_orchestrator pick_place_test`,
-`ros2 run palletizer_orchestrator benchmark`. `sim_ctl.sh start|stop` (env `SIM_ARGS`) runs a
-headless manual-mode stack for the scripted tests.
+`ros2 run palletizer_perception eval_pallet_perception`, `ros2 run palletizer_orchestrator
+sku_runs`, `pick_place_test`, `benchmark --prefix v2bench`. `sim_ctl.sh start|stop` (env
+`SIM_ARGS`) runs a headless manual-mode stack (a first pallet is delivered) for scripted tests.
 
 ## Known issues / gotchas
 - **Two gz-sim 8 installs** (ROS vendor 8.11 used by everything; OSRF 8.15 in /usr). Plugins link
   the vendor build; `test_build.sh` checks with ldd. Don't import the /usr `gz.transport13` bindings.
 - The gz rgbd point cloud uses camera-link axes but is stamped with `gz_frame_id` → `cloud_relay`.
-- gz principal point: pixel i is centred at i + 0.5 (`camera.pixel_center_offset`).
-- ros_gz_bridge drops names from SceneBroadcaster Pose_V → `ModelPosePublisher`.
+- gz principal point: pixel i is centred at i + 0.5 (`pixel_center_offset`), both cameras.
+- ros_gz_bridge drops names from SceneBroadcaster Pose_V → `ModelPosePublisher` (one instance per
+  prefix; world models must not start with `box_` / `pallet_`).
 - Large images/clouds need reliable QoS (best effort loses fragments).
 - rclpy: don't call `Executor.shutdown()` while `spin()` runs in another thread (use a spin_once
   loop + join; see `sim_client.py`).
@@ -145,24 +195,31 @@ headless manual-mode stack for the scripted tests.
 - The copied UR `ompl_planning.yaml` had no group entry → added `manipulator` (else OMPL aborts, −27).
 - Never `pkill -f <pattern>` from a shell whose own command line contains the pattern (it kills
   itself); use `pkill -f "[p]attern"` or process-group kills (`sim_ctl.sh`).
-- Fill % is low (~25–30 %) by construction: boxes up to 0.6 m on a 1.2×0.8 m deck, a strict support
-  rule (75 % within 5 mm → random heights almost never form a common plane), and the pallet ends at
-  the first box with no feasible placement. See docs/RESULTS.md for the analysis.
+- Real-time factor falls with the number of stacked boxes (one DART contact island: RTF ≈ 0.9
+  empty, ≈ 0.5 at 48, ≈ 0.25 at 80 boxes; bullet collision detector, PGS solver and max_contacts
+  did not help). Sim-time metrics (picks/min) are unaffected; wall time is.
+- Timestamps: F/T weighing averages by message stamps (sim time); arrival times made a window
+  empty when the motion server's executor threads were busy.
+- Stack monitoring must not see a new box as a neighbour's shift: the orchestrator's cycle report
+  marks placements pending until verified; tests that place boxes must publish it too.
+- The pedestal keep-out (folded arm vs pedestal at low heights close to the robot) costs a slot for
+  small SKUs and depends on the delivered pallet pose (reported per pallet).
+- Pilz LIN at 0.6 m/s sometimes exceeds a joint limit near wrist reconfigurations → the same line
+  is re-planned at 0.25 (`motion.lin_fallback_scaling`).
 - Simulated sensing and actuation are ideal (pinhole camera, no blur, joint position control) →
   perception and placement errors are far below the thresholds; expect several mm on hardware.
-- The offline reachability map is computed on an EMPTY pallet; tall stacks near the pedestal can
-  block the upper arm for other targets → the motion validator is what catches that (costs
-  ~1–3 s of planning per box).
-- box_spawner must not spawn before its previous box appears in `/sim/box_poses` (with sim time
-  the timer fires twice back-to-back at startup; two boxes were spawned into each other).
-- Startup races: the motion server waits for `/joint_states` before serving (controllers can
-  come up after the orchestrator).
+- Mixed-mode fill % is low (~25 %) by construction (random boxes, strict support rule, the pallet
+  ends at the first box that fits nowhere); see docs/RESULTS.md.
+- The offline reachability map is computed without placed boxes; tall stacks can block the upper
+  arm → the motion validator (current scene) catches that.
+- box_spawner must not spawn before its previous box appears in `/sim/box_poses`.
+- Startup races: the motion server waits for `/joint_states` before serving.
 - Swing routing uses the canonical pan (TCP bearing in (−180°, 180°]); never pick 2π branches
-  relative to the current pan (it drifts until the +x route hits the joint limit and the arm
-  swings through the queue — this knocked boxes off the belt).
-- Always run `src/palletizer_tools/test/kill_sim.sh` between launches: gz/move_group can outlive
-  `ros2 launch`, and a leftover controller_manager breaks the next run's controller spawners
-  ("Controller already loaded" / "Failed to configure controller"). `sim_ctl.sh` and the
-  benchmark do this automatically.
-- The metrics logger keeps a box ledger: `lost_boxes` counts boxes that end below belt level
-  outside the pallet (knocked off). Collapses = placed boxes drifting > 20 mm.
+  relative to the current pan.
+- Always run `src/palletizer_tools/test/kill_sim.sh` between launches (it also kills
+  pallet_exchanger / pallet_perception): gz/move_group can outlive `ros2 launch`, and a leftover
+  controller_manager breaks the next run's controller spawners. `sim_ctl.sh`, the benchmark and
+  sku_runs do this automatically. Don't start a second sim while a batch is running.
+- The metrics logger keeps a box ledger: `lost_boxes` = boxes below belt level outside the station
+  area and lane (knocked off). GT collapses = placed boxes drifting > 20 mm (evaluation of
+  pallet_perception's stack events).

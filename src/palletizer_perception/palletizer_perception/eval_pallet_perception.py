@@ -229,7 +229,9 @@ def main(argv=None):
         d = f.u_axis * dist if k != 5 else f.v_axis * dist
         before = sim.box_poses[name][0].copy()
         sim.set_pose(name, (pos[0] + d[0], pos[1] + d[1], pos[2] + 0.002), yaw)
-        sim.wait_for(lambda: len(events) > n0, 4 * sim.cell['pallet_perception']['monitor_period'])
+        # a few monitoring passes (period + acquisition of fresh frames)
+        sim.wait_for(lambda: len(events) > n0,
+                     4 * sim.cell['pallet_perception']['monitor_period'] + 8.0)
         time.sleep(0.5)
         true_shift = float(np.linalg.norm(sim.box_poses[name][0][:2] - before[:2]))
         mine = [e for e in events[n0:] if e.index == k]

@@ -9,8 +9,9 @@
   new_box        placement measurement by CHANGE detection: pixels that rose to the
                  commanded top height since the reference frame. Works when boxes of the same
                  height touch (they merge in any single frame)
-  check_shifts   stack monitoring: for every placed box, compare its top-face pixels with the
-                 reference; the displaced centroid of its top face = shift estimate
+  check_shifts   stack monitoring: every placed box is compared with ITSELF AT PLACEMENT
+                 (its top-face pixels then, and the heights around it then): the displaced
+                 centroid of its visible top face = shift from where it was placed
 All geometry is measured; the config gives only the camera mounting pose, the station AREA,
 tolerances and limits.
 """
@@ -66,10 +67,14 @@ class BoxRecord:
     yaw: float
     length: float
     width: float
-    mask: np.ndarray          # top-face pixels
+    mask: np.ndarray          # top-face pixels at placement (full image)
     commanded: np.ndarray     # commanded top-face centre (world xyz)
     sim_name: str = ''
     events: list = field(default_factory=list)
+    win: tuple = None         # (r0, r1, c0, c1) image window around the box
+    Zp: np.ndarray = None     # heights in the window at placement
+    reported: float = 0.0     # largest shift reported so far
+    collapsed: bool = False
 
 
 @dataclass
@@ -279,53 +284,83 @@ class PalletDetector:
             ch &= ~exclude
         return D, ch
 
-    def refresh_masks(self, Z_ref, records):
-        """Keep in each record only the pixels that still show its top face (a box placed on
-        top, or seen in front of it, hides part of it)."""
-        tol = self.p['plateau_tol']
-        for rec in records:
-            with np.errstate(invalid='ignore'):
-                rec.mask &= np.abs(Z_ref - rec.center[2]) < tol
+    def record(self, index, center, yaw, length, width, mask, commanded, Z_at_placement,
+               sim_name=''):
+        """Placement-time model of a box for stack monitoring: its top pixels and the
+        heights in a window around it (to tell pixels it moved onto from existing surfaces)."""
+        z = float(center[2])
+        m = self._k(0.08, z)
+        rows, cols = np.nonzero(mask)
+        H, W = mask.shape
+        if len(rows) == 0:
+            win = (0, 1, 0, 1)
+        else:
+            win = (max(rows.min() - m, 0), min(rows.max() + m + 1, H),
+                   max(cols.min() - m, 0), min(cols.max() + m + 1, W))
+        r0, r1, c0, c1 = win
+        return BoxRecord(index, np.asarray(center, float), yaw, length, width, mask, commanded,
+                         sim_name, win=win, Zp=Z_at_placement[r0:r1, c0:c1].copy())
 
-    def check_shifts(self, Z_ref, Z_now, records, exclude=None):
-        """Stack monitoring. For every placed box whose surroundings changed, compare its
-        visible top-face pixels: now = (old ones that did not drop or get covered) + (pixels
-        next to it that rose to its top height); shift = displacement of their centroid.
-        Most of the visible top dropped -> COLLAPSE."""
-        D, ch = self.changed(Z_ref, Z_now, exclude)
+    def check_shifts(self, Z_now, records, exclude=None):
+        """Stack monitoring against each box's placement-time state. Its top pixels then,
+        minus the ones now covered (a box on top / in front) = what can still be judged;
+        of those, the ones now lower dropped away, and pixels next to it that were lower at
+        placement and are now at its top height (and belong to no other placed box) are
+        where it moved to. Shift = displacement of the visible top's centroid from where it
+        was placed; more than shift_threshold -> SHIFT; most of the top dropped -> COLLAPSE.
+        Events are raised once (again if the shift grows by another threshold)."""
         thr, tol = self.p['change_threshold'], self.p['new_box_tol']
+        keep = ~exclude if exclude is not None else np.ones(Z_now.shape, bool)
+        if not records:
+            return []
+        dil = np.ones((3, 3), np.uint8)
+        grown = [cv2.dilate(rec.mask.astype(np.uint8), dil).astype(bool) for rec in records]
         events = []
-        if not ch.any():
-            return events
-        keep = ~exclude if exclude is not None else np.ones(D.shape, bool)
-        for rec in records:
-            z = float(rec.center[2])
-            pitch = self.cam.pixel_pitch(z)
-            k = self._k(0.06, z) * 2 + 1
-            near = cv2.dilate(rec.mask.astype(np.uint8), np.ones((k, k), np.uint8)).astype(bool)
-            if (ch & near).sum() * pitch * pitch < self.p['min_change_area']:
+        for i, rec in enumerate(records):
+            if rec.collapsed:
                 continue
+            z = float(rec.center[2])
+            r0, r1, c0, c1 = rec.win
+            Zn = Z_now[r0:r1, c0:c1]
+            m0 = rec.mask[r0:r1, c0:c1]
+            # tops of OTHER boxes at the same height (a neighbour in the layer) are not where
+            # this box moved to; lower / higher boxes cannot be confused with it
+            others = np.zeros(m0.shape, bool)
+            for j, o in enumerate(records):
+                if j != i and abs(float(o.center[2]) - z) < tol:
+                    others |= grown[j][r0:r1, c0:c1]
+            kp = keep[r0:r1, c0:c1]
             with np.errstate(invalid='ignore'):
-                valid = rec.mask & keep & np.isfinite(D)
-                vanished = valid & (D < -thr)
-                covered = valid & (D > thr)
-                appeared = near & keep & ~rec.mask & (np.abs(Z_now - z) < tol) & (D > thr)
-            seen = valid & ~covered
-            if seen.sum() < 0.2 * max(rec.mask.sum(), 1):
-                continue                        # hidden (covered / excluded): cannot tell
-            if vanished.sum() > 0.5 * seen.sum():
-                dz = float(np.median(D[vanished]))
+                fin = np.isfinite(Zn)
+                covered = m0 & fin & (Zn > z + thr)
+                seen = m0 & kp & fin & ~covered
+                vanished = seen & (Zn < z - thr)
+                appeared = ~m0 & ~others & kp & fin & (np.abs(Zn - z) < tol) & \
+                    (rec.Zp < z - thr)
+            n_seen = int(seen.sum())
+            if n_seen < 0.2 * max(int(m0.sum()), 1):
+                continue                        # mostly hidden: cannot tell
+            if vanished.sum() > 0.5 * n_seen:
+                dz = float(np.median(Zn[vanished]) - z)
+                rec.collapsed = True
                 events.append(ShiftEvent(rec.index, 'COLLAPSE', float('nan'), dz, rec.center,
                                          f'top face of box {rec.index} dropped '
                                          f'{-dz * 1000:.0f} mm'))
                 continue
             new = (seen & ~vanished) | appeared
-            c_old = self.cam.plane_points(seen, z).mean(axis=0)
-            c_new = self.cam.plane_points(new, z).mean(axis=0)
-            shift = float(np.linalg.norm(c_new - c_old))
-            if shift > self.p['shift_threshold']:
+            rays = self.cam.rays[r0:r1, c0:c1]
+
+            def centroid(mask):
+                r = rays[mask]
+                t = (z - self.cam.pos[2]) / r[:, 2]
+                return (self.cam.pos[None, :2] + r[:, :2] * t[:, None]).mean(axis=0)
+            d = centroid(new) - centroid(seen)
+            shift = float(np.linalg.norm(d))
+            if shift > self.p['shift_threshold'] and \
+                    shift > rec.reported + self.p['shift_threshold']:
+                rec.reported = shift
                 events.append(ShiftEvent(rec.index, 'SHIFT', shift, 0.0,
-                                         np.r_[rec.center[:2] + c_new - c_old, z],
-                                         f'box {rec.index} shifted {shift * 1000:.0f} mm'))
-                rec.mask = (rec.mask & ~vanished) | appeared
+                                         np.r_[rec.commanded[:2] + d, z],
+                                         f'box {rec.index} shifted {shift * 1000:.0f} mm from '
+                                         f'where it was placed'))
         return events

@@ -21,8 +21,9 @@ Topics (in): /pallet_camera/{depth_image,image,camera_info} (reliable),
 
 Frames are used only when no robot link hangs over the station (TF, same check as the
 conveyor perception) and no pixel over the station is higher than any stack can be.
-Continuous stack monitoring: every monitor_period s with a clear view, compare with the
-reference; a box shifted > shift_threshold -> StackEvent (SHIFT / COLLAPSE).
+Continuous stack monitoring: every monitor_period s with a clear view, every placed box is
+compared with its state at placement; shifted > shift_threshold from where it was placed ->
+StackEvent SHIFT, top dropped -> COLLAPSE.
 """
 
 import math
@@ -48,7 +49,7 @@ from tf2_ros import Buffer, StaticTransformBroadcaster, TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
 from palletizer_perception import debug_view as dv
-from palletizer_perception.pallet_detector import BoxRecord, PalletDetector, normalize_axis
+from palletizer_perception.pallet_detector import PalletDetector, normalize_axis
 from palletizer_tools import cell_config
 from palletizer_tools.pallet_frame import PalletFrame
 
@@ -294,8 +295,8 @@ class PalletPerception(Node):
                 check.err_z = float(z - tgt[2])
                 period = math.pi / 2 if abs(L - W) < 0.01 else math.pi
                 check.err_yaw = abs(normalize_axis(r.yaw - pl.yaw, period))
-                rec = BoxRecord(req.index, np.r_[r.center, z], r.yaw, r.length, r.width, mask,
-                                tgt, req.sim_model_name)
+                rec = self.det.record(req.index, np.r_[r.center, z], r.yaw, r.length, r.width,
+                                      mask, tgt, Z, req.sim_model_name)
                 check.message = (f'placement {req.index}: error {check.err_xy * 1000:.1f} mm xy, '
                                  f'{check.err_z * 1000:+.1f} mm z, '
                                  f'{math.degrees(check.err_yaw):.2f} deg')
@@ -305,15 +306,14 @@ class PalletPerception(Node):
                 # keep monitoring it at its commanded footprint
                 zc = self.det.cam.plane_points(np.ones(Z.shape, bool), tgt[2])
                 mask = rect_pixels(zc.reshape(Z.shape + (2,)), tgt, pl.yaw, L, W)
-                rec = BoxRecord(req.index, tgt.copy(), pl.yaw, L, W, mask, tgt,
-                                req.sim_model_name)
+                rec = self.det.record(req.index, tgt.copy(), pl.yaw, L, W, mask, tgt, Z,
+                                      req.sim_model_name)
             k = self.det._k(0.01, tgt[2]) * 2 + 1
             excl = cv2.dilate(rec.mask.astype(np.uint8), np.ones((k, k), np.uint8)).astype(bool)
             excl |= self.pending_mask(P)
-            events = self.det.check_shifts(self.Z_ref, Z, self.records, exclude=excl)
+            events = self.det.check_shifts(Z, self.records, exclude=excl)
             self.records.append(rec)
-            self.Z_ref, self.P_ref = Z.copy(), P
-            self.det.refresh_masks(self.Z_ref, self.records)
+            self.Z_ref, self.P_ref = Z.copy(), P       # reference for the next placement
             self.verified = len(self.records)
         check.header.stamp = self.get_clock().now().to_msg()
         self.check_pub.publish(check)
@@ -328,8 +328,9 @@ class PalletPerception(Node):
     def monitor(self):
         if self.frame is None or not self.records:
             return
-        # a short window: gives up quickly when the arm is in the view
-        view = self.acquire((self.n_frames + 2) / self.cell['pallet_camera']['rate'])
+        # a short window (n frames need n / rate s of sim time; RTF < 1 stretches that):
+        # gives up quickly when the arm is in the view
+        view = self.acquire(3.0 * (self.n_frames + 2) / self.cell['pallet_camera']['rate'])
         if view is None:
             return
         _, P = view
@@ -338,11 +339,10 @@ class PalletPerception(Node):
             if self.frame is None:
                 return
             excl = self.pending_mask(P)
-            events = self.det.check_shifts(self.Z_ref, Z, self.records, exclude=excl)
-            if events:
-                # accept the new state as reference (keep pending areas for their verify)
-                self.Z_ref = np.where(excl, self.Z_ref, Z)
-                self.det.refresh_masks(self.Z_ref, self.records)
+            events = self.det.check_shifts(Z, self.records, exclude=excl)
+            self.get_logger().debug(f'monitor: {len(self.records)} boxes, {len(self.pending)} '
+                                    f'pending ({int(excl.sum())} px excluded), '
+                                    f'{len(events)} events')
         if events:
             self.publish_events(events)
             self.publish_map(P)
