@@ -12,6 +12,7 @@ Topics:  ~/spawned (std_msgs/String) name of every spawned box
 """
 
 import math
+import time
 
 import numpy as np
 import rclpy
@@ -45,6 +46,11 @@ class BoxSpawner(Node):
         self.specs = {}             # name -> (size, yaw) of boxes this spawner created
         self.counter = 0
         self.next_box = None        # drawn but not yet spawned (keeps seeded order)
+        # Last spawned box until it shows up in /sim/box_poses: the gap check can't see it
+        # before that. (With sim time the spawn timer can fire twice back-to-back at startup;
+        # without this the second box was spawned into the first.)
+        self.pending = None
+        self.pending_since = 0.0
         cb = MutuallyExclusiveCallbackGroup()
         self.create_subscription(TFMessage, '/sim/box_poses', self.on_poses, 10)
         # Own group: the synchronous call() from the timer/service needs the response
@@ -67,6 +73,10 @@ class BoxSpawner(Node):
 
     def gap_ok(self, size, yaw):
         """True if the new box would be >= min_gap behind every box on the belt."""
+        if self.pending is not None:
+            if self.pending not in self.poses and time.monotonic() - self.pending_since < 10.0:
+                return False
+            self.pending = None
         spawn_x = boxes.spawn_xyz(self.cell, size, yaw)[0]
         front = spawn_x + boxes.x_extent(size, yaw) / 2.0
         cv = self.cell['conveyor']
@@ -107,6 +117,7 @@ class BoxSpawner(Node):
         if res is None or not res.success:
             return False, f'gz refused to spawn {name}'
         self.next_box = None
+        self.pending, self.pending_since = name, time.monotonic()
         self.specs[name] = (size, yaw)
         spec = BoxSpec()
         spec.stamp = self.get_clock().now().to_msg()

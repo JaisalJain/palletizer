@@ -43,7 +43,8 @@ def run_one(planner, seed, rtf, timeout, log_dir, attempt=1):
     run = f'bench_{planner}_seed{seed}'
     for f in glob.glob(os.path.join(RESULTS, f'{run}_*.csv')):
         os.remove(f)
-    log = open(os.path.join(log_dir, f'{run}.log'), 'w')
+    suffix = '' if attempt == 1 else f'_attempt{attempt}'
+    log = open(os.path.join(log_dir, f'{run}{suffix}.log'), 'w')
     cmd = ['ros2', 'launch', 'palletizer_bringup', 'palletizer.launch.py', 'mode:=auto',
            'gui:=false', 'rviz:=false', f'planner:={planner}', f'seed:={seed}',
            'max_pallets:=1', f'rtf:={rtf}', f'run_name:={run}', f'results_dir:={RESULTS}']
@@ -133,9 +134,17 @@ def summary(planners, rtf):
         common = sorted(set(fa) & set(fb), key=int)
         if common:
             d = np.array([fb[s] - fa[s] for s in common])
+            tol = 0.05     # fill % differences below this are rounding of measured dims
+            better, worse = int((d > tol).sum()), int((d < -tol).sum())
+            nz = d[np.abs(d) > tol]
+            try:
+                from scipy.stats import wilcoxon
+                pval = f', Wilcoxon signed-rank p = {wilcoxon(nz).pvalue:.3f}' if len(nz) >= 5 else ''
+            except Exception:  # noqa: BLE001
+                pval = ''
             lines += ['', f'Paired per seed ({b} − {a}, fill %): mean {d.mean():+.2f}, '
-                      f'{b} better on {(d > 0).sum()}, equal on {(d == 0).sum()}, worse on '
-                      f'{(d < 0).sum()} of {len(common)} seeds.']
+                      f'{b} better on {better}, equal on {len(d) - better - worse}, worse on '
+                      f'{worse} of {len(common)} seeds{pval}.']
             lines += ['', '| Seed | ' + ' | '.join(f'{p} fill % (boxes)' for p in planners) + ' |',
                       '|---|' + '---|' * len(planners)]
             boxes_n = {p: {r['seed']: r['boxes'] for r in data[p][0]} for p in planners}
