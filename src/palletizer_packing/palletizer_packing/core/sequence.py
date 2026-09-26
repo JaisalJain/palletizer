@@ -7,6 +7,7 @@ from palletizer_packing.core.pallet import Box
 
 def box_sequence(spawner_cfg, seed, n):
     rng = np.random.default_rng(seed)
+    spawner_cfg = spawner_cfg.get('mixed', spawner_cfg)
     out = []
     for _ in range(n):
         size = [float(rng.uniform(lo, hi)) for lo, hi in

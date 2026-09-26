@@ -51,11 +51,51 @@ def cardboard_rgba(rng):
 
 
 def random_box(rng, spawner_cfg):
-    size = tuple(float(rng.uniform(lo, hi)) for lo, hi in
-                 zip(spawner_cfg['size_min'], spawner_cfg['size_max']))
-    mass = float(rng.uniform(*spawner_cfg['mass_range']))
+    """Mixed mode (v1 distribution): uniformly random size and mass."""
+    mx = spawner_cfg.get('mixed', spawner_cfg)
+    size = tuple(float(rng.uniform(lo, hi)) for lo, hi in zip(mx['size_min'], mx['size_max']))
+    mass = float(rng.uniform(*mx['mass_range']))
     yaw = float(rng.uniform(-spawner_cfg['yaw_range'], spawner_cfg['yaw_range']))
     return size, mass, yaw, cardboard_rgba(rng)
+
+
+def parse_sku(key, spawner_cfg):
+    """SKU key -> (external size (L, W, H) [m], mass range [kg]). Catalog keys give the
+    catalog carton; any other "LxWxH" (mm) is taken literally with the default mass range."""
+    key = key.strip()
+    cat = spawner_cfg.get('catalog', {})
+    if key in cat:
+        e = cat[key]
+        return tuple(float(v) for v in e['size']), tuple(e['mass'])
+    try:
+        dims = [float(v) / 1000.0 for v in key.lower().split('x')]
+    except ValueError:
+        dims = []
+    if len(dims) != 3 or min(dims) <= 0:
+        raise ValueError(f'unknown SKU "{key}" (not in the catalog, not "LxWxH" in mm)')
+    return (max(dims[:2]), min(dims[:2]), dims[2]), tuple(spawner_cfg['default_mass'])
+
+
+def parse_order(text, spawner_cfg):
+    """ "400x300x300:30, 600x400x300:20" -> [(key, size, mass_range, count), ...]"""
+    out = []
+    for item in text.split(','):
+        if not item.strip():
+            continue
+        key, _, n = item.partition(':')
+        size, mass = parse_sku(key, spawner_cfg)
+        out.append((key.strip(), size, mass, int(n) if n.strip() else 0))
+    return out
+
+
+def sku_box(rng, size, mass_range, spawner_cfg):
+    """One carton of a SKU: random mass in the SKU's range, random orientation on the belt
+    (length along or across the belt, +/- yaw_range)."""
+    L, W, H = size
+    s = (L, W, H) if rng.random() < 0.5 else (W, L, H)
+    mass = float(rng.uniform(*mass_range))
+    yaw = float(rng.uniform(-spawner_cfg['yaw_range'], spawner_cfg['yaw_range']))
+    return s, mass, yaw, cardboard_rgba(rng)
 
 
 def yaw_quaternion(yaw):

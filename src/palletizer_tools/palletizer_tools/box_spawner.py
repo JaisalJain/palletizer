@@ -4,7 +4,11 @@ The spawner plays the upstream process (it is not part of the robot cell's contr
 may use ground-truth poses to keep a minimum gap between boxes on the infeed.
 
 Params:  rate (spawn attempts/s, 0 = on demand only; default from cell_config), seed
-         (-1 = random), max_boxes (0 = unlimited), cell_config
+         (-1 = random), max_boxes (0 = unlimited), cell_config,
+         sku   single-SKU stream: catalog key ("400x300x300") or raw dims in mm ("347x253x219")
+         order order list "400x300x300:30, 600x400x300:20" (the SKU changes mid-stream; the
+               robot is NOT told); spawning stops when the list is done
+         (neither sku nor order: mixed mode, v1 random boxes)
 Service: ~/spawn_box (std_srvs/Trigger) spawn the next box now (if the gap allows)
 Topics:  ~/spawned (std_msgs/String) name of every spawned box
          /sim/box_specs (palletizer_interfaces/BoxSpec, transient local) ground-truth specs,
@@ -39,6 +43,12 @@ class BoxSpawner(Node):
         self.rate = float(self.declare_parameter('rate', float(sp['rate'])).value)
         seed = int(self.declare_parameter('seed', -1).value)
         self.max_boxes = int(self.declare_parameter('max_boxes', 0).value)
+        sku = str(self.declare_parameter('sku', '').value)
+        order = str(self.declare_parameter('order', '').value)
+        # [(key, size, mass_range, count)]; count 0 = unlimited
+        self.order = boxes.parse_order(order, sp) if order else \
+            ([(sku,) + boxes.parse_sku(sku, sp) + (0,)] if sku else [])
+        self.order_pos = [0, 0]      # item index, boxes spawned of that item
         self.rng = np.random.default_rng(None if seed < 0 else seed)
         self.min_gap = sp['min_gap']
 
@@ -66,7 +76,8 @@ class BoxSpawner(Node):
         if self.rate > 0:
             self.create_timer(1.0 / self.rate, self.on_timer, callback_group=cb)
         self.get_logger().info(
-            f'box_spawner ready (rate {self.rate}/s, seed {seed}, max_boxes {self.max_boxes})')
+            f'box_spawner ready (rate {self.rate}/s, seed {seed}, max_boxes {self.max_boxes}, '
+            f'{"order " + order if order else "sku " + sku if sku else "mixed"})')
 
     def on_poses(self, msg):
         self.poses = boxes.poses_from_tf(msg)
@@ -104,8 +115,16 @@ class BoxSpawner(Node):
         if self.max_boxes and len(self.specs) >= self.max_boxes:
             return False, 'max_boxes reached'
         if self.next_box is None:
-            self.next_box = boxes.random_box(self.rng, self.cell['spawner'])
-        size, mass, yaw, rgba = self.next_box
+            if self.order:
+                i, n = self.order_pos
+                if i >= len(self.order):
+                    return False, 'order list complete'
+                key, sku_size, mass_range, _ = self.order[i]
+                self.next_box = boxes.sku_box(self.rng, sku_size, mass_range,
+                                              self.cell['spawner']) + (key,)
+            else:
+                self.next_box = boxes.random_box(self.rng, self.cell['spawner']) + ('',)
+        size, mass, yaw, rgba, sku = self.next_box
         if not self.gap_ok(size, yaw):
             return False, 'not enough gap at the infeed'
         if not self.spawn_cli.wait_for_service(timeout_sec=2.0):
@@ -117,6 +136,11 @@ class BoxSpawner(Node):
         if res is None or not res.success:
             return False, f'gz refused to spawn {name}'
         self.next_box = None
+        if self.order:
+            self.order_pos[1] += 1
+            count = self.order[self.order_pos[0]][3]
+            if count and self.order_pos[1] >= count:
+                self.order_pos = [self.order_pos[0] + 1, 0]
         self.pending, self.pending_since = name, time.monotonic()
         self.specs[name] = (size, yaw)
         spec = BoxSpec()
@@ -125,9 +149,10 @@ class BoxSpawner(Node):
         spec.size_x, spec.size_y, spec.size_z = size
         spec.mass = mass
         spec.spawn_yaw = yaw
+        spec.sku = sku
         self.spec_pub.publish(spec)
         self.spawned_pub.publish(String(data=name))
-        desc = (f'{name}: {size[0]:.3f}x{size[1]:.3f}x{size[2]:.3f} m, '
+        desc = (f'{name}{" [" + sku + "]" if sku else ""}: {size[0]:.3f}x{size[1]:.3f}x{size[2]:.3f} m, '
                 f'{mass:.2f} kg, yaw {math.degrees(yaw):+.1f} deg')
         self.get_logger().info(f'spawned {desc}')
         return True, desc

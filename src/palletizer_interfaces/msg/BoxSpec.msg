@@ -7,3 +7,4 @@ float64 size_y
 float64 size_z
 float64 mass              # [kg]
 float64 spawn_yaw         # [rad]
+string sku                # SKU key from the spawner catalog / order ("" = mixed mode)

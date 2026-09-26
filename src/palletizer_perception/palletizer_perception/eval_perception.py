@@ -70,7 +70,7 @@ def main(argv=None):
     sim.delete_all_boxes()
 
     sp = sim.cell['spawner']
-    hi, lo = sp['size_max'], sp['size_min']
+    hi, lo = sp['mixed']['size_max'], sp['mixed']['size_min']
     yr = sp['yaw_range']
     edge = [] if args.no_edge_cases else [
         ((hi[0], hi[1], hi[2]), yr), ((hi[0], hi[1], lo[2]), -yr),

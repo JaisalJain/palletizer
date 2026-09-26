@@ -208,12 +208,41 @@ pick_place_test:
   neighbor_disp_mm: 10.0
 
 spawner:
+  # The spawner plays the UPSTREAM process: it is the only reader of box sizes. The robot's
+  # decision-making nodes load this file with role='robot', which strips this section.
   rate: 0.5                       # spawn attempts per second (0 = only on demand);
                                   # a box is spawned only when the min_gap allows
-  size_min: [0.2, 0.2, 0.15]
-  size_max: [0.6, 0.6, 0.40]
-  mass_range: [1.0, 10.0]
-  yaw_range: 0.4363               # +/- rad (25 deg)
+  yaw_range: 0.4363               # +/- rad (25 deg) on the belt
   rear_margin: 0.03               # spawned box rear edge this far inside the belt start
   min_gap: 0.12                   # spawn only if the new box ends up >= this far (m, along x)
                                   # behind the rearmost box on the infeed
+  # mode:=mixed (v1): uniformly random boxes
+  mixed:
+    size_min: [0.2, 0.2, 0.15]
+    size_max: [0.6, 0.6, 0.40]
+    mass_range: [1.0, 10.0]
+  # mode:=single_sku: SKU catalog. Key = nominal module L x W x H [mm] (ISO 3394 plan
+  # modules on the 1200 x 800 grid, plus non-modular sizes). size = external carton size [m]:
+  # modular cartons are made slightly UNDER the module (594 x 394 for 600 x 400) so they fit
+  # the pallet with a placement gap. mass: uniform range [kg] (max/min <= 1.5).
+  # Select with box_spawner params sku:=<key> or order:="<key>:<count>, <key>:<count>";
+  # a key that is not in the catalog is parsed as external dims in mm ("347x253x219").
+  catalog:
+    600x400x400: {size: [0.594, 0.394, 0.400], mass: [10.0, 15.0]}
+    600x400x300: {size: [0.594, 0.394, 0.300], mass: [8.0, 12.0]}
+    400x300x300: {size: [0.394, 0.294, 0.300], mass: [5.0, 7.5]}
+    400x300x200: {size: [0.394, 0.294, 0.200], mass: [4.0, 6.0]}
+    300x200x200: {size: [0.294, 0.194, 0.200], mass: [2.0, 3.0]}
+    500x300x250: {size: [0.494, 0.294, 0.250], mass: [5.0, 7.5]}
+    450x350x300: {size: [0.450, 0.350, 0.300], mass: [6.0, 9.0]}      # non-modular
+    520x320x250: {size: [0.520, 0.320, 0.250], mass: [5.0, 7.5]}      # non-modular
+    380x280x220: {size: [0.380, 0.280, 0.220], mass: [3.0, 4.5]}      # non-modular
+  default_mass: [3.0, 4.5]        # SKUs given as raw dims (not in the catalog)
+
+exchanger:
+  # Simulated pallet conveyor / forklift (plant equipment). The ONLY reader of pallet sizes;
+  # stripped from the robot's view of this file like `spawner`.
+  pallet_types:                   # deck length x width x height [m], mass [kg]
+    EUR:      {size: [1.2, 0.8, 0.144], mass: 25.0}      # EUR 1 (ISO 6780)
+    1000x800: {size: [1.0, 0.8, 0.144], mass: 20.0}
+    HALF:     {size: [0.8, 0.6, 0.144], mass: 10.0}      # EUR 6 half pallet
