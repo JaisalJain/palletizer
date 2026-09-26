@@ -94,6 +94,7 @@ ros2 topic echo /orchestrator/cycle_report
 ```bash
 src/palletizer_tools/test/run_all.sh            # build, no-hardcoding check, sim tests
 python -m pytest src/palletizer_packing/test    # packing core + pattern planner
+python -m pytest src/palletizer_perception/test # pallet detector on synthetic depth images
 python -m pytest src/palletizer_tools/test/test_no_hardcoding.py
 
 SIM_ARGS="seed:=42" src/palletizer_tools/test/sim_ctl.sh start  # sim for the tests below
