@@ -286,9 +286,17 @@ class MotionServer(Node):
         return self.ptp(self.route_pan(q))
 
     def go_park(self):
-        """Out of the camera view: hub on the pallet side, then the park pose."""
+        """Out of the camera views: hub on the pallet side, then the park pose; with a box
+        held, the hold pose instead (at the folded park pose a big box hits the forearm)."""
         T = self.kin.fk(self.joints)
         yaw = math.atan2(T[1, 0], T[0, 0])           # tool x axis (TCP points down)
+        if self.held is not None:
+            hold = np.array(self.cell['robot']['hold_xyz'], dtype=float)
+            q, _ = self.solve(hold, [yaw, yaw + math.pi / 2, yaw - math.pi / 2, yaw + math.pi],
+                              ref=self.joints)
+            if q is None:
+                return False, f'no IK for the hold pose {hold}'
+            return self.ptp(self.route_pan(q))
         _, msg = self.go_hub(self.station_xy, max(self.hub_z(0.0), T[2, 3]), yaw)
         ok, msg2 = self.ptp(self.route_pan(np.array(self.cell['robot']['park'], dtype=float)))
         return ok, f'{msg}; {msg2}'
@@ -319,6 +327,8 @@ class MotionServer(Node):
         box = gh.request.box
         res = PickBox.Result()
         m = self.m
+        if self.held is not None or self.grasped:
+            return self._fail(res, 'EXEC_FAILED', 'already holding a box')
         top = np.array([box.top_center.position.x, box.top_center.position.y,
                         box.top_center.position.z])
         grasp_yaws = [box.yaw + k * math.pi / 2 for k in range(4)]

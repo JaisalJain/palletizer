@@ -19,6 +19,10 @@ robot:
   # pallet camera must see the station while the arm waits) and high enough that a carried
   # box clears a full pallet sliding out of the station (stack top <= 1.2 m + deck).
   park: [-0.282, -1.842, 0.948, -0.677, -1.571, -0.282]
+  # "Park" while holding a box (pallet closed after the pick): TCP here, cup down. Extended
+  # (a big box hangs clear of the forearm, which it hits at the folded park pose), outside
+  # both camera views of what matters (station area, pick box) and clear of a pallet leaving.
+  hold_xyz: [0.8, 0.3, 1.5]
 
 gripper:
   body_radius: 0.04               # suction body cylinder

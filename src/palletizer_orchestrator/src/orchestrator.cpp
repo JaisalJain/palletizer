@@ -75,6 +75,7 @@ struct Context
   rclcpp::Publisher<PalletStatus>::SharedPtr status_pub;
 
   std::atomic<bool> box_ready{false};
+  std::atomic<bool> grasped{false};
   std::atomic<bool> operator_close{false};
   std::atomic<uint32_t> shift_events{0};
 
@@ -647,6 +648,22 @@ private:
   ContextPtr ctx_;
 };
 
+// The suction cup holds a box (a previous cycle failed while carrying it).
+class Holding : public BT::ConditionNode
+{
+public:
+  Holding(const std::string & n, const BT::NodeConfig & c, ContextPtr ctx)
+  : BT::ConditionNode(n, c), ctx_(ctx) {}
+  static BT::PortsList providedPorts() {return {};}
+  BT::NodeStatus tick() override
+  {
+    return ctx_->grasped ? BT::NodeStatus::SUCCESS : BT::NodeStatus::FAILURE;
+  }
+
+private:
+  ContextPtr ctx_;
+};
+
 class IsPalletStarted : public BT::ConditionNode
 {
 public:
@@ -917,6 +934,9 @@ int main(int argc, char ** argv)
   auto ready_sub = node->create_subscription<std_msgs::msg::Bool>(
     "/conveyor_controller/box_ready", 10,
     [ctx](std_msgs::msg::Bool::SharedPtr m) {ctx->box_ready = m->data;});
+  auto grasped_sub = node->create_subscription<std_msgs::msg::Bool>(
+    "/suction/grasped", 10,
+    [ctx](std_msgs::msg::Bool::SharedPtr m) {ctx->grasped = m->data;});
 
   rclcpp::executors::MultiThreadedExecutor exec;
   exec.add_node(node);
@@ -954,6 +974,7 @@ int main(int argc, char ** argv)
   reg("MorePallets", std::type_identity<MorePallets>{});
   reg("PalletFull", std::type_identity<PalletFull>{});
   reg("IsPalletStarted", std::type_identity<IsPalletStarted>{});
+  reg("Holding", std::type_identity<Holding>{});
   reg("PalletExchange", std::type_identity<PalletExchangeNode>{});
   reg("ResetPalletModels", std::type_identity<ResetPalletModels>{});
   reg("MeasurePallet", std::type_identity<MeasurePalletNode>{});
@@ -976,6 +997,7 @@ int main(int argc, char ** argv)
   RCLCPP_INFO(node->get_logger(), "tree loaded (%s); Groot2 on port %ld; mode %s, planner %s",
     tree_file.c_str(), groot_port, ctx->mode.c_str(), ctx->planner.c_str());
   (void)event_sub;
+  (void)grasped_sub;
   (void)close_srv;
 
   ctx->start_pallet();

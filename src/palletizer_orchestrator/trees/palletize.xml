@@ -52,6 +52,18 @@
 
   <BehaviorTree ID="Cycle">
     <Sequence>
+      <!-- Safety net: a box still on the cup from a failed cycle is taken off (operator). -->
+      <Fallback name="NotHolding">
+        <Inverter>
+          <Holding/>
+        </Inverter>
+        <Sequence name="RejectLeftoverHeld">
+          <RejectHeldBox/>
+          <DropHeld/>
+          <Park/>
+          <ReportCycle outcome="rejected_held"/>
+        </Sequence>
+      </Fallback>
       <WaitBoxReady timeout="600"/>
 
       <Fallback name="Detect">
