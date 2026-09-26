@@ -110,6 +110,7 @@ pallet_perception: /pallet_perception/height_map --> packing_node; stack_events 
 | `/packing/status`, `/packing/next_target`, `/packing/markers`, `/packing/state` | PackingState / Placement / MarkerArray / String | |
 | `/motion/pick`, `/motion/place` | PickBox / PlaceBox actions | feedback: phase, progress |
 | `/motion/park`, `/motion/drop_held`, `/motion/check_placement`, `/motion/scene/{add_placed,clear_placed,set_pallet}` | Trigger / CommitPlacement / SetPallet | |
+| `/motion/check_placements` | CheckPlacements | a sequence (a whole pattern), each placement checked with the previous ones as temporary scene boxes |
 | `/suction/weigh` | Weigh | tare / mass from `/suction/wrench` (averaged by sim-time stamps) |
 | `/pallet_exchange` | PalletExchange action | pallet_exchanger; `exchange_mode` auto / operator |
 | `/pallet/confirm_exchange` (exchanger), `/pallet/close` (orchestrator) | Trigger | operator |
@@ -160,7 +161,11 @@ pallet_perception: /pallet_perception/height_map --> packing_node; stack_events 
   slots filtered by the reachability map at every layer height; layer pair A/B chosen by
   (count, interlock) or (interlock ≥ min, count, interlock) with `pattern_priority`, fast
   support pre-filter, full static stability check of the whole pallet and PyBullet per layer.
-  Order within a layer: far side first. Runtime: SKU = first box (±10 mm), next slot checked on
+  Order within a layer: far side first. Then the whole pattern is checked in motion against
+  its own future stack (`/motion/check_placements`): slots blocked by lower stacks (the upper
+  arm's shoulder housing sweeps ~0.8–0.97 m high within ~0.25 m of the base axis: a layer-4
+  box next to the pedestal blocks far top-layer targets) are dropped from their layer
+  (`restrict()`: plus unsupported boxes above) and the stack re-checked. Runtime: SKU = first box (±10 mm), next slot checked on
   the perceived state + motion validator; reasons PATTERN_COMPLETE / SKU_CHANGE / HEIGHT_LIMIT /
   NO_FEASIBLE_PLACEMENT. Empty pallet + other box → new SKU.
 - **Orchestrator** (`trees/palletize.xml`): Park → NewPallet (Park, ResetPalletModels, PalletExchange,
@@ -203,7 +208,9 @@ sku_runs`, `pick_place_test`, `benchmark --prefix v2bench`. `sim_ctl.sh start|st
 - Stack monitoring must not see a new box as a neighbour's shift: the orchestrator's cycle report
   marks placements pending until verified; tests that place boxes must publish it too.
 - The pedestal keep-out (folded arm vs pedestal at low heights close to the robot) costs a slot for
-  small SKUs and depends on the delivered pallet pose (reported per pallet).
+  small SKUs and depends on the delivered pallet pose (reported per pallet). Near-row stacks
+  above ~0.8 m (world) next to the pedestal block the upper arm for some far targets; the
+  offline map cannot know (no boxes) → the pattern's motion check drops those top-layer slots.
 - Pilz LIN at 0.6 m/s sometimes exceeds a joint limit near wrist reconfigurations → the same line
   is re-planned at 0.25 (`motion.lin_fallback_scaling`).
 - Simulated sensing and actuation are ideal (pinhole camera, no blur, joint position control) →

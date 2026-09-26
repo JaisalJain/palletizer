@@ -233,6 +233,10 @@ class MotionServer(Node):
                 q[i] += 2 * math.pi
         return q
 
+    def at_tcp(self, xyz, tol=0.01):
+        """The TCP is (still) at xyz."""
+        return float(np.linalg.norm(self.kin.fk(self.joints)[:3, 3] - np.asarray(xyz))) < tol
+
     def lift_z(self, box_height):
         """TCP height at which a carried box clears the conveyor frame / end stop."""
         return (self.cell['conveyor']['belt_top_z'] + self.m['lift_clearance'] +
@@ -435,7 +439,7 @@ class MotionServer(Node):
         (goal_handle.succeed if res.success else goal_handle.abort)()
         return res
 
-    def place_poses(self, pl, top_in_tcp, yaw_offset, box_height):
+    def place_poses(self, pl, top_in_tcp, yaw_offset, box_height, avoid_yaw=None):
         """Joint/TCP poses for placing at `pl` with the current scene, or an error string.
 
         Returns (yaw, q_pre, q_above, above_tcp, pre_tcp, release_tcp). Every pose must have
@@ -454,6 +458,8 @@ class MotionServer(Node):
         pre_top = target_top + [0, 0, m['pre_place_height']]
         best = None
         for yaw in [pl.yaw + yaw_offset + k * math.pi for k in range(2)]:
+            if avoid_yaw is not None and abs(math.remainder(yaw - avoid_yaw, 2 * math.pi)) < 0.1:
+                continue                     # the other tool yaw (a different wrist branch)
             q, _ = self.solve(tcp_for(pre_top, yaw), [yaw], ref=self.joints)
             if q is None:
                 continue
@@ -557,6 +563,18 @@ class MotionServer(Node):
         # the slow final centimetres
         self.feedback(gh, PlaceBox, 'descend', 0.3)
         ok, msg = self.descend(release_tcp, yaw)
+        if not ok and self.at_tcp(above):
+            # nothing moved (Pilz found no IK along the line, e.g. near a wrist
+            # reconfiguration): the same target with the other tool yaw (wrist branch)
+            alt = self.place_poses(pl, self.held['top_in_tcp'], self.held['yaw_offset'],
+                                   self.held['box'].height, avoid_yaw=yaw)
+            if not isinstance(alt, str):
+                self.get_logger().info(f'descend: {msg}; retrying with tool yaw '
+                                       f'{math.degrees(alt[0]):.0f} deg')
+                yaw, q_pre, q_above, above, pre_tcp, release_tcp = alt
+                ok, msg = self.ptp(self.route_pan(q_above))
+                if ok:
+                    ok, msg = self.descend(release_tcp, yaw)
         if not ok:
             self.lin(pre_tcp, yaw)
             return self._fail(res, 'EXEC_FAILED', f'descend: {msg}')

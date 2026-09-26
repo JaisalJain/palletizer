@@ -559,9 +559,8 @@ class PatternPlanner:
         st = stability(state, p, box, self.rules)
         if not st.ok:
             return self._fail('NO_FEASIBLE_PLACEMENT', f'slot {i}: {st.reason}', t0)
-        if any(p.rotated == e.rotated and abs(p.u0 - e.u0) < 0.02 and abs(p.v0 - e.v0) < 0.02
-               for e in self.exclude):
-            return self._fail('NO_FEASIBLE_PLACEMENT', f'slot {i} failed in motion', t0)
+        # A slot that failed in motion is retried once (the pattern has no alternative; a
+        # second failure makes the orchestrator close the pallet): `exclude` is ignored.
         checks = 0
         # the pre-check (before the pick) only needs SKU, slot and rules; the motion check
         # runs in the full plan, in parallel with the pick

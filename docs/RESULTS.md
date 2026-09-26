@@ -1,6 +1,151 @@
 # Results
 
 All numbers are produced by scripts in this repo on the final code; re-run them to reproduce.
+v2 (measured pallets, single-SKU patterns, pallet exchange) comes first; the v1 results
+(mixed random boxes) follow unchanged below, with a v2 regression of the mixed mode.
+
+# v2 results
+
+## Acceptance summary (v2 "DONE" criteria)
+
+<!-- V2SUMMARY:BEGIN -->
+(filled in at the end of the v2 runs)
+<!-- V2SUMMARY:END -->
+
+## Milestone B — Pallet perception
+
+`ros2 run palletizer_perception eval_pallet_perception --reps 3` (manual-mode sim, arm parked;
+raw data `results/pallet_perception_eval.json`). Pallet camera 800×600 at 2.8 m, depth noise
+σ = 2 mm, 4 frames averaged. Ground truth only scores.
+
+1. **Pallet detection**: 3 exchanges per pallet type (EUR 1200×800, 1000×800, HALF 800×600),
+   each delivered at a random pose (±2 cm, ±1.5°).
+2. **Placements**: 9 boxes spawned onto an EUR pallet at deliberately perturbed poses around
+   nominal "commanded" slots (a layer of six equal-height 394×294×300 boxes with 5 mm gaps + a
+   mixed second layer), each measured by `verify_placement` like after a robot place. The
+   camera's placement error (measured − commanded) is compared with the true one (actual −
+   commanded).
+3. **Height map** vs a ground-truth rasterization of the stack (same 1 cm grid).
+4. **Stack monitoring**: nothing moves for 2.5 monitoring periods, then three boxes are shoved
+   with `set_pose` (10, 40, 30 mm).
+
+| Metric | Result | Threshold | |
+|---|---|---|---|
+| Pallets measured | 9/9 | all | PASS |
+| Pallet dims error, max (u / v) | 3.15 / 1.09 mm | ≤ 10 mm | PASS |
+| Pallet position error, max | 0.48 mm | ≤ 10 mm | PASS |
+| Pallet yaw error, max | 0.20° | ≤ 1° | PASS |
+| Deck height error, max | 0.01 mm | | |
+| Placements measured | 9/9 | all | |
+| Camera vs ground-truth placement, max / mean (xy) | 0.70 / 0.25 mm | ≤ 5 mm | PASS |
+| … z / yaw, max | 0.02 mm / 0.39° | | |
+| Height map vs ground truth, occupied interior cells (6275), max / mean | 4.91 / 1.71 mm | ≤ 10 mm | PASS |
+| … all occupied cells incl. box-edge cells within 10 mm | 99.5 % | (edge cells straddle two heights) | |
+| Occupied cells not observed (occluded) | 8.5 % | (the record fills them) | |
+| Stack events while nothing moves | 0 | 0 | PASS |
+| Shove 10 mm (below the 20 mm threshold) | no event | no event | PASS |
+| Shove 40 mm / 30 mm | SHIFT, estimated 39.7 / 30.1 mm, attributed to the shoved box, none elsewhere | event | PASS |
+
+Per pallet type (dims error u / v, centre, yaw): HALF ≤ 1.3 / 0.2 mm, ≤ 0.1 mm, 0.00°;
+1000×800 ≤ 3.2 / 1.1 mm, ≤ 0.5 mm, ≤ 0.2°; EUR ≤ 2.9 / 0.3 mm, ≤ 0.4 mm, 0.00°. The length
+along u is measured 1–3 mm short (deck-board end faces seen obliquely are removed by the
+flatness test); well inside the threshold.
+
+**How it works** (`pallet_detector.py`, all measured, no pallet in the config):
+- *Deck*: the highest large flat height plateau in the station area. A per-pixel flatness
+  test rejects vertical faces seen obliquely — the robot pedestal's side face at deck height
+  first got merged into the deck (dims +22 mm). The gaps between deck boards are closed, the
+  outermost pixel ring re-grown (the flatness test drops it: −6 mm), and the rectangle comes
+  from second moments (unbiased w.r.t. pixel quantization). The pallet frame's v axis is the deck
+  axis pointing away from the robot.
+- *Placement check by change detection*: pixels that now lie at the commanded top height and were
+  clearly lower before the place. Adjacent equal-height boxes (5 mm gap) merge in any single
+  frame, the change does not. An early version asked for a rise of half the box height and
+  missed a 6 mm strip that had seen the neighbour's side wall (dims −6 mm, 3 mm centre error);
+  only flat top pixels are fitted (side-wall pixels biased the centre by 3–6 mm).
+- *Height map*: max of the observed points per 1 cm cell, NaN where occluded.
+- *Stack monitoring*: every placed box is compared with its own state at placement (its top
+  pixels then, the heights around it then); pixels of other same-height boxes are excluded, so
+  a later neighbour is not a "shift", and slow creep accumulates (unit test: two 12 mm moves with
+  a placement in between → SHIFT 24 mm). Frames are used only with no robot link over the
+  station (TF) and nothing higher than a stack over it; placements announced by the cycle
+  report are excluded until verified. An earlier version compared consecutive frames: it
+  reported a pending box as its neighbour's collapse and would not accumulate creep.
+- Unit tests on synthetic ray-cast depth images (`src/palletizer_perception/test/
+  test_pallet_detector.py`, 9 tests): deck dims/pose, height map, new box next to an
+  equal-height box, no events at rest, 30 / 35 mm shifts, 12 mm not reported, creep, collapse.
+
+**Packing on the perceived stack**: before every plan the placement record is merged with the
+perceived height map; where both are locally unambiguous (flat 3×3 neighbourhood in the record,
+consistent observed neighbours) and differ by > 15 mm, perception wins and the disagreement is
+logged (`packing` log, counted in PackingState). The planner waits up to 3 s for a map that
+includes the last commit (the verification runs during the pick, so it is normally there).
+
+## Milestone C — Single-SKU pattern planner
+
+`python -m pytest src/palletizer_packing/test` → test_pattern.py (30 tests): known optimal
+counts for exact modules without gap (600×400 on EUR = 4, 400×300 = 8, 300×200 = 16,
+600×400 on 1200×1000 = 5, 400×300 on 1000×800 = 6) and for the catalog cartons with the 5 mm gap
+(same counts; exact modules with a gap do not fit: 2 × 600 + 5 > 1200, hence cartons under
+module size), a problem that needs the non-guillotine 5-block structure (8 boxes of 0.3×0.1 on
+0.5×0.5, guillotine 7), every catalog SKU: no overlaps (gap kept), no overhang, under the
+height limit, every box statically stable in placement order, far side first; interlock for
+520×320 (B ≠ A, 100 % bridging, whole pallet stable in PyBullet); column stack for 600×400
+(unique optimum) with priority count, and priority interlock trading a box per B layer for
+interlocking (400×300×200: 40 → 38 boxes, 50 % bridging); unreachable slots dropped; SKU
+recognition (±10 mm same SKU, beyond → SKU_CHANGE, a new pallet re-adopts); the planner refuses
+a slot whose supporting layer perception does not see (NO_FEASIBLE_PLACEMENT); motion validator.
+
+Patterns of the catalog on an EUR pallet at the station centre with the real reachability map
+(`ros2 run palletizer_packing pattern_report --physics`):
+
+<!-- PATTERNS:BEGIN -->
+
+Pallet EUR 1200 x 800 mm at the station centre, gap 5 mm.
+
+| SKU | Carton [mm] | Optimum / layer | count: A / B x layers = boxes (interlock) | interlock: A / B x layers = boxes (interlock) | Fill % (count) | Note (count) |
+|---|---|---|---|---|---|---|
+| 600x400x400 | 594 x 394 x 400 | 4 | 4 / 4 x 2 = 8 (0 %) | 4 / 3 x 2 = 7 (100 %) | 67.8 | column stack (no interlocking layer with the same count) |
+| 600x400x300 | 594 x 394 x 300 | 4 | 4 / 4 x 3 = 12 (0 %) | 4 / 4 x 3 = 12 (0 %) | 76.3 | column stack (no interlocking layer with the same count) |
+| 400x300x300 | 394 x 294 x 300 | 8 | 8 / 8 x 3 = 24 (0 %) | 8 / 7 x 3 = 23 (50 %) | 79.0 | column stack (no interlocking layer with the same count) |
+| 400x300x200 | 394 x 294 x 200 | 8 | 8 / 8 x 5 = 40 (0 %) | 8 / 7 x 5 = 38 (50 %) | 87.8 | column stack (no interlocking layer with the same count) |
+| 300x200x200 | 294 x 194 x 200 | 16 | 15 / 15 x 5 = 75 (0 %) | 15 / 15 x 5 = 75 (0 %) | 84.9 | column stack (no interlocking layer with the same count); 1/1 slots of the optimum dropped (unreachable) |
+| 500x300x250 | 494 x 294 x 250 | 6 | 6 / 6 x 4 = 24 (100 %) | 6 / 6 x 4 = 24 (100 %) | 82.5 | interlocked A/B (100 % of boxes bridge) |
+| 450x350x300 | 450 x 350 x 300 | 4 | 4 / 4 x 3 = 12 (50 %) | 4 / 4 x 3 = 12 (50 %) | 51.4 | interlocked A/B (50 % of boxes bridge) |
+| 520x320x250 | 520 x 320 x 250 | 4 | 4 / 4 x 4 = 16 (100 %) | 4 / 4 x 4 = 16 (100 %) | 60.3 | interlocked A/B (100 % of boxes bridge) |
+| 380x280x220 | 380 x 280 x 220 | 8 | 8 / 8 x 5 = 40 (0 %) | 8 / 7 x 5 = 38 (50 %) | 88.7 | column stack (no interlocking layer with the same count) |
+
+<!-- PATTERNS:END -->
+
+- **Optimum vs used**: 300×200×200 fits 16 per layer on the deck, but one slot of the near
+  row lies in the pedestal keep-out (the folded arm hits the pedestal at low heights close to
+  the robot) → 15 per layer. The keep-out cost depends on the delivered pallet pose: a pallet
+  delivered 18 mm closer to the robot also loses a slot of 400×300 (7 instead of 8 per layer).
+  The single-SKU table below reports the count actually used on every pallet.
+- **Stack-aware motion check** (not in the offline table above, it needs MoveIt): the first
+  SKU batch closed 400×300×200 at 28/35 and 300×200×200 at 60/75 with NO_FEASIBLE_PLACEMENT —
+  the first slot of layer 5 (far-left corner) was in collision: MoveIt reported
+  `upper_arm_link` vs a layer-4 box next to the pedestal. At layer 4 that box's top (0.94 m)
+  is at the height of the upper arm's shoulder housing (≈ 0.80–0.97 m within ≈ 0.25 m of the
+  base axis), which sweeps over it at the pan angle for far-left targets. The offline
+  reachability map has no boxes. Fix: when a pattern is created, `/motion/check_placements`
+  checks every slot with all earlier slots in the planning scene as temporary boxes; infeasible
+  slots are dropped from their layer only (and boxes above that lose support), and the stack is
+  re-checked. 400×300×200 on that pallet: 3 top-layer slots dropped → 32 boxes, then 32/32
+  PATTERN_COMPLETE. (A fixed "no tall boxes near the pedestal" rule would have cost many slots
+  that are fine: the collision depends on the pan angle.)
+- **Column stack vs interlock**: for the modular sizes on EUR (600×400, 400×300, 380×280) the
+  densest layer is unique up to mirroring (a 2×2 or 4×2 grid) → with priority `count` the
+  layers are column-stacked (stated in the log / PackingState note). Priority `interlock`
+  drops one box per B layer to interlock (−1 box per two layers). 500×300, 450×350 and 520×320
+  have a different layer with the same count → interlocked at no cost.
+- Pattern search time: 0.1–1.4 s (300×200: 5 s with the PyBullet check of every layer); done
+  once per pallet at its first box.
+
+<!-- SKU_RUNS:BEGIN -->
+<!-- SKU_RUNS:END -->
+
+# v1 results
 
 ## Acceptance summary (v1 "DONE" criteria)
 
