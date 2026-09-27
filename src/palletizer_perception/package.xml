@@ -2,9 +2,9 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>palletizer_perception</name>
-  <version>0.2.0</version>
-  <description>Overhead RGB-D box perception: dims, yaw and top-face grasp point.</description>
-  <maintainer email="jaisaljain345@gmail.com">jaisaljain</maintainer>
+  <version>2.0.0</version>
+  <description>Overhead RGB-D perception: box dims, yaw and grasp point on the conveyor; pallet, stack height map, placement checks and stack monitoring at the pallet station.</description>
+  <maintainer email="jaisaljain345@gmail.com">Jaisal K Jain</maintainer>
   <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>

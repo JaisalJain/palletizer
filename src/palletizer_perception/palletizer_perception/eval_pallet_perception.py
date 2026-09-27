@@ -32,6 +32,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile, ReliabilityPolicy
 from scipy.spatial.transform import Rotation
 
 from palletizer_perception.pallet_detector import normalize_axis
+from palletizer_tools import workspace
 from palletizer_tools.pallet_frame import PalletFrame
 from palletizer_tools.sim_client import SimClient
 
@@ -56,7 +57,7 @@ def main(argv=None):
     ap.add_argument('--reps', type=int, default=3)
     ap.add_argument('--seed', type=int, default=3)
     ap.add_argument('--types', nargs='+', default=['HALF', '1000x800', 'EUR'])
-    ap.add_argument('--out', default=os.path.expanduser('~/palletizer_ws/results'))
+    ap.add_argument('--out', default=workspace.path('results'))
     ap.add_argument('--debug', default='', help='save height maps (npz) here')
     args = ap.parse_args(argv)
     rclpy.init()

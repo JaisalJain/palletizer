@@ -21,7 +21,7 @@ from palletizer_interfaces.srv import DetectBox
 from scipy.spatial.transform import Rotation
 from std_srvs.srv import Trigger
 
-from palletizer_tools import boxes
+from palletizer_tools import boxes, workspace
 from palletizer_tools.sim_client import SimClient
 
 
@@ -55,7 +55,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--n', type=int, default=60)
     ap.add_argument('--seed', type=int, default=7)
-    ap.add_argument('--out', default=os.path.expanduser('~/palletizer_ws/results'))
+    ap.add_argument('--out', default=workspace.path('results'))
     ap.add_argument('--no-edge-cases', action='store_true',
                     help='skip the worst-case boxes (max size at +/-25 deg, overhanging the belt)')
     args = ap.parse_args(argv)

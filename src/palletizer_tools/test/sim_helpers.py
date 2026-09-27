@@ -8,10 +8,11 @@ import sys
 
 import rclpy
 
+from palletizer_tools import workspace
 from palletizer_tools.sim_client import JOINTS, SimClient  # noqa: F401
 
 OUTPUT_DIR = os.path.join(
-    os.environ.get('PALLETIZER_TEST_OUTPUT', os.path.expanduser('~/palletizer_ws/test_output')))
+    os.environ.get('PALLETIZER_TEST_OUTPUT', workspace.path('test_output')))
 
 
 class Checks:

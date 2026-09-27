@@ -21,8 +21,9 @@ import sys
 import time
 
 import numpy as np
+from palletizer_tools import workspace
 
-WS = os.path.expanduser('~/palletizer_ws')
+WS = workspace.root()
 RESULTS = os.path.join(WS, 'results')
 DOC = os.path.join(WS, 'docs', 'RESULTS.md')
 BEGIN = '<!-- BENCHMARK:BEGIN -->'

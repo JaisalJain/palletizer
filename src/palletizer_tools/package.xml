@@ -2,9 +2,9 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>palletizer_tools</name>
-  <version>0.1.0</version>
-  <description>Box spawner, conveyor controller, point-cloud relay and integration tests for the palletizing cell.</description>
-  <maintainer email="jaisaljain345@gmail.com">jaisaljain</maintainer>
+  <version>2.0.0</version>
+  <description>Simulated plant (box spawner, conveyor controller, pallet exchanger, reject pusher), point-cloud relay, shared helpers and integration tests for the palletizing cell.</description>
+  <maintainer email="jaisaljain345@gmail.com">Jaisal K Jain</maintainer>
   <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>

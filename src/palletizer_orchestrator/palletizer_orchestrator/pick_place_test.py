@@ -30,6 +30,7 @@ from rclpy.qos import DurabilityPolicy, QoSProfile
 from scipy.spatial.transform import Rotation
 from std_srvs.srv import Trigger
 
+from palletizer_tools import workspace
 from palletizer_tools.sim_client import SimClient
 
 # Planning includes motion-feasibility checks (~1-3 s each, up to motion_check_max): same
@@ -217,7 +218,7 @@ class PickPlaceTest:
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--n', type=int, default=20)
-    ap.add_argument('--out', default=os.path.expanduser('~/palletizer_ws/results'))
+    ap.add_argument('--out', default=workspace.path('results'))
     args = ap.parse_args(argv)
     rclpy.init()
     sim = SimClient('pick_place_test')

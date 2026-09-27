@@ -30,7 +30,7 @@ import time
 
 import numpy as np
 
-from palletizer_tools import cell_config
+from palletizer_tools import cell_config, workspace
 from palletizer_tools.ur_ik import UrKinematics
 
 _KIN = None
@@ -168,8 +168,8 @@ def main(argv=None):
     ap.add_argument('--workers', type=int, default=None)
     args = ap.parse_args(argv)
     cell = cell_config.load(role='robot')
-    out = args.out or os.path.join(os.path.expanduser('~/palletizer_ws/src/palletizer_motion/config'),
-                                   cell['reachability']['file'])
+    out = args.out or workspace.path('src', 'palletizer_motion', 'config',
+                                        cell['reachability']['file'])
     xs, ys, zs, yaws, reach = build(cell, not args.no_collision, args.workers)
     np.savez_compressed(out, x=xs, y=ys, z=zs, yaw=yaws, reach=reach,
                         collision_checked=not args.no_collision)

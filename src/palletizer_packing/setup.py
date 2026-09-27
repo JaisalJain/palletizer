@@ -4,7 +4,7 @@ package_name = 'palletizer_packing'
 
 setup(
     name=package_name,
-    version='0.2.0',
+    version='2.0.0',
     packages=find_packages(exclude=['test']),
     data_files=[
         ('share/ament_index/resource_index/packages', ['resource/' + package_name]),
@@ -12,7 +12,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    maintainer='jaisaljain',
+    maintainer='Jaisal K Jain',
     maintainer_email='jaisaljain345@gmail.com',
     description='Pallet packing core + ROS wrapper.',
     license='Apache-2.0',

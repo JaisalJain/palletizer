@@ -9,7 +9,8 @@ source "$WS_ROOT/.venv/bin/activate"
 [[ -f $WS_ROOT/install/setup.bash ]] && source "$WS_ROOT/install/setup.bash"
 set -u
 DIR=$(cd "$(dirname "$0")" && pwd)
-LOG=${PALLETIZER_SIM_LOG:-/tmp/palletizer_sim.log}
+LOG=${PALLETIZER_SIM_LOG:-${PALLETIZER_TEST_OUTPUT:-$WS_ROOT/test_output}/palletizer_sim.log}
+mkdir -p "$(dirname "$LOG")"
 declare -A result
 order=(test_build test_no_hardcoding test_controllers test_camera test_conveyor test_suction
        test_pallet_mover)

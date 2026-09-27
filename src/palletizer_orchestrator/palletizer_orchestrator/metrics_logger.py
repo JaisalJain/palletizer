@@ -34,7 +34,7 @@ from scipy.spatial.transform import Rotation
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 
-from palletizer_tools import boxes
+from palletizer_tools import boxes, workspace
 
 BOX_FIELDS = [
     'run', 'planner', 'seed', 'pallet', 'box_index', 'sim_name', 'outcome', 'success',
@@ -67,7 +67,7 @@ class MetricsLogger(Node):
     def __init__(self):
         super().__init__('metrics_logger')
         self.results_dir = os.path.expanduser(self.declare_parameter(
-            'results_dir', '~/palletizer_ws/results').value)
+            'results_dir', workspace.path('results')).value)
         self.run = self.declare_parameter('run_name', time.strftime('run_%Y%m%d_%H%M%S')).value
         self.planner = self.declare_parameter('planner', '').value
         self.seed = int(self.declare_parameter('seed', -1).value)

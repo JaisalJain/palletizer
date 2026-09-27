@@ -8,7 +8,9 @@ source /opt/ros/jazzy/setup.bash
 source "$WS_ROOT/.venv/bin/activate"
 [[ -f $WS_ROOT/install/setup.bash ]] && source "$WS_ROOT/install/setup.bash"
 set -u
-PIDFILE=/tmp/palletizer_sim.pid
+OUT_DIR=${PALLETIZER_TEST_OUTPUT:-$WS_ROOT/test_output}
+mkdir -p "$OUT_DIR"
+PIDFILE=$OUT_DIR/palletizer_sim.pid
 
 stop() {
   if [[ -f $PIDFILE ]]; then
@@ -23,7 +25,7 @@ stop() {
 }
 
 start() {
-  local log=${1:-/tmp/palletizer_sim.log}
+  local log=${1:-$OUT_DIR/palletizer_sim.log}
   stop
   setsid ros2 launch palletizer_bringup palletizer.launch.py gui:=false rviz:=false \
     spawn_rate:=0.0 ${SIM_ARGS:-} > "$log" 2>&1 &

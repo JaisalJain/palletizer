@@ -1,8 +1,29 @@
+# colcon
 build/
 install/
 log/
+
+# python
+.venv/
 __pycache__/
 *.pyc
+.pytest_cache/
+
+# test / run output
 test_output/
-.venv/
 results/logs/
+# ad-hoc launch runs (metrics_logger default run names); curated runs are named
+results/*_seed-1_*
+*.log
+*.bag
+*.mcap
+rosbag2_*/
+
+# media build scratch (tools/make_media.sh keeps only docs/media)
+tools/media/_work/
+
+# editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store

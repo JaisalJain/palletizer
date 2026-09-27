@@ -1,4 +1,4 @@
-# Python packages not available via apt; installed into ~/palletizer_ws/.venv (see README)
+# Python packages not available via apt; installed into the workspace .venv (see README)
 numpy==1.26.4
 cloudpickle==3.1.2
 Farama-Notifications==0.0.6

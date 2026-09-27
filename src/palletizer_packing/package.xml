@@ -2,11 +2,11 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>palletizer_packing</name>
-  <version>0.2.0</version>
+  <version>2.0.0</version>
   <description>Pallet packing: pure-Python core (height map, rules, planners, PyBullet checker,
     Gymnasium env) and a ROS 2 service wrapper. pybullet/gymnasium come from the project venv
     (requirements.txt).</description>
-  <maintainer email="jaisaljain345@gmail.com">jaisaljain</maintainer>
+  <maintainer email="jaisaljain345@gmail.com">Jaisal K Jain</maintainer>
   <license>Apache-2.0</license>
 
   <exec_depend>rclpy</exec_depend>

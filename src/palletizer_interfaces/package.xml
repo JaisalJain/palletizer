@@ -2,9 +2,9 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>palletizer_interfaces</name>
-  <version>0.2.0</version>
+  <version>2.0.0</version>
   <description>Messages, services and actions for the palletizing cell.</description>
-  <maintainer email="jaisaljain345@gmail.com">jaisaljain</maintainer>
+  <maintainer email="jaisaljain345@gmail.com">Jaisal K Jain</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>

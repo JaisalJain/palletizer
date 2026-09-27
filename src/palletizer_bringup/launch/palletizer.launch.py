@@ -28,6 +28,7 @@ from launch.events import Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from palletizer_tools import workspace
 import yaml
 
 
@@ -125,8 +126,7 @@ def generate_launch_description():
         DeclareLaunchArgument('max_pallets', default_value='0'),
         DeclareLaunchArgument('finish_with_next_box', default_value='false'),
         DeclareLaunchArgument('run_name', default_value=''),
-        DeclareLaunchArgument('results_dir', default_value=os.path.expanduser(
-            '~/palletizer_ws/results')),
+        DeclareLaunchArgument('results_dir', default_value=workspace.path('results')),
         DeclareLaunchArgument('sku', default_value=''),
         DeclareLaunchArgument('order', default_value=''),
         DeclareLaunchArgument('pallets', default_value=''),

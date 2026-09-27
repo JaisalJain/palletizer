@@ -8,7 +8,7 @@ source "$WS_ROOT/.venv/bin/activate"
 # (no workspace overlay: this is a from-scratch build)
 set -u
 WS=$(cd "$(dirname "$0")/../../.." && pwd)
-OUT=$(mktemp -d /tmp/palletizer_build_test.XXXX)
+OUT=$(mktemp -d -t palletizer_build_test.XXXX)
 fail=0
 check() { if [[ $1 == 0 ]]; then echo "  [PASS] $2"; else echo "  [FAIL] $2"; fail=$((fail + 1)); fi; }
 
