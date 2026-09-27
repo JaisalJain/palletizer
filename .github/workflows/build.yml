@@ -39,7 +39,7 @@ jobs:
           apt-get install -y \
             ros-jazzy-ur-description ros-jazzy-ur-simulation-gz ros-jazzy-ros-gz \
             ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers ros-jazzy-moveit python3-scipy \
-            ros-jazzy-rviz-2d-overlay-plugins \
+            ros-jazzy-rviz-2d-overlay-plugins ros-jazzy-behaviortree-cpp \
             python3-venv python3-pip
 
       - name: Cache pip

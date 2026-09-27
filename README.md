@@ -23,7 +23,7 @@ Results: [docs/RESULTS.md](docs/RESULTS.md).
 ```bash
 sudo apt install ros-jazzy-ur-description ros-jazzy-ur-simulation-gz ros-jazzy-ros-gz \
   ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers ros-jazzy-moveit python3-scipy \
-  ros-jazzy-rviz-2d-overlay-plugins
+  ros-jazzy-rviz-2d-overlay-plugins ros-jazzy-behaviortree-cpp
 cd ~/palletizer_ws
 python3 -m venv --system-site-packages .venv && touch .venv/COLCON_IGNORE
 source /opt/ros/jazzy/setup.bash
