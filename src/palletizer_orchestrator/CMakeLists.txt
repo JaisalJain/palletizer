@@ -26,7 +26,7 @@ target_link_libraries(orchestrator
   behaviortree_cpp::behaviortree_cpp)
 
 install(TARGETS orchestrator DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY trees launch DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY trees DESTINATION share/${PROJECT_NAME})
 ament_python_install_package(${PROJECT_NAME})
 install(PROGRAMS
   scripts/metrics_logger
