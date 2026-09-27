@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Palletizer: an autonomous palletizing cell in ROS 2 Jazzy and Gazebo Harmonic"
+abstract: >-
+  A simulated palletizing cell: a UR10e with a suction gripper, a zone conveyor and a pallet
+  station with a pallet-exchange handshake. Two overhead RGB-D cameras measure every carton,
+  every pallet, the stack and every placement; a layer-pattern planner (with interlocking
+  layers) or mixed-box planners choose the target; MoveIt 2 picks and places; a
+  BehaviorTree runs the loop.
+authors:
+  - family-names: Jain
+    given-names: Jaisal K
+    email: jaisaljain345@gmail.com
+version: 2.0.0
+date-released: 2026-09-27
+license: Apache-2.0
+repository-code: "https://github.com/JaisalJain/palletizer"
+keywords:
+  - ros2
+  - gazebo
+  - moveit2
+  - palletizing
+  - robotics
+  - bin-packing
+  - behavior-trees
+  - computer-vision
+  - ur10e

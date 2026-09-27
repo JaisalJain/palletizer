@@ -39,7 +39,7 @@ from sensor_msgs.msg import Image
 # name: (eye, target, hfov [rad]); world frame, see the cell layout in CLAUDE.md
 VIEWS = {
     'hero': ((-3.0, -3.4, 3.6), (-0.3, -0.2, 0.9), 0.95),
-    'pallet': ((-1.75, -2.45, 2.55), (0.05, -0.6, 0.6), 0.9),
+    'pallet': ((-2.1, -2.8, 2.8), (0.05, -0.6, 0.55), 0.95),
     'lane': ((4.0, -3.3, 2.6), (-0.4, -0.6, 0.35), 1.2),
 }
 WIDTH, HEIGHT = 1920, 1080

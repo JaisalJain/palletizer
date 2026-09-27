@@ -4,6 +4,35 @@ All numbers are produced by scripts in this repo on the final code; re-run them 
 v2 (measured pallets, single-SKU patterns, pallet exchange) comes first; the v1 results
 (mixed random boxes) follow unchanged below, with a v2 regression of the mixed mode.
 
+<!-- TOC:BEGIN -->
+**Contents**
+
+- [v2 results](#v2-results)
+  - [Acceptance summary (v2 "DONE" criteria)](#acceptance-summary-v2-done-criteria)
+  - [Milestone B — Pallet perception](#milestone-b--pallet-perception)
+  - [Milestone C — Single-SKU pattern planner](#milestone-c--single-sku-pattern-planner)
+  - [Single-SKU pallets (acceptance runs)](#single-sku-pallets-acceptance-runs)
+    - [SKU change, unknown SKU / pallet, interlock priority](#sku-change-unknown-sku--pallet-interlock-priority)
+  - [Milestone D — Pallet-full decision and exchange handshake](#milestone-d--pallet-full-decision-and-exchange-handshake)
+  - [Milestone F — Speed](#milestone-f--speed)
+  - [Mixed mode (v1 planners) under v2](#mixed-mode-v1-planners-under-v2)
+  - [v2 test changes](#v2-test-changes)
+- [v1 results](#v1-results)
+  - [Acceptance summary (v1 "DONE" criteria)](#acceptance-summary-v1-done-criteria)
+  - [Milestone B — Perception](#milestone-b--perception)
+  - [Milestone C — MoveIt 2 pick and place](#milestone-c--moveit-2-pick-and-place)
+    - [Reachability map](#reachability-map)
+    - [Pick-and-place acceptance (ros2 run palletizer_orchestrator pick_place_test --n 20)](#pick-and-place-acceptance-ros2-run-palletizer_orchestrator-pick_place_test---n-20)
+  - [Milestone D — Packing](#milestone-d--packing)
+    - [Unit tests](#unit-tests)
+    - [Why fill % is low](#why-fill--is-low)
+    - [Planner development (offline, same rules + reachability map, physics off)](#planner-development-offline-same-rules--reachability-map-physics-off)
+    - [Motion feasibility in the loop](#motion-feasibility-in-the-loop)
+  - [Milestone E — Autonomous operation](#milestone-e--autonomous-operation)
+  - [Milestone E — Benchmark](#milestone-e--benchmark)
+    - [Reading the benchmark](#reading-the-benchmark)
+<!-- TOC:END -->
+
 # v2 results
 
 ## Acceptance summary (v2 "DONE" criteria)
@@ -17,7 +46,7 @@ v2 (measured pallets, single-SKU patterns, pallet exchange) comes first; the v1 
 | 3 | Milestone B thresholds | pallet dims ≤ 3.1 mm, pose ≤ 0.5 mm / 0.17°, height map ≤ 4.2 mm on occupied cells, camera vs GT placement ≤ 0.67 mm, shoved box detected (39.9 / 29.9 mm for 40 / 30 mm), none for 10 mm, no false events | [Milestone B](#milestone-b--pallet-perception) |
 | 4 | Every catalog SKU: a full pallet unattended | 9/9 SKUs: boxes placed = pattern count, PATTERN_COMPLETE, 0 collapses (GT), 0 stack events, exchange completed and the next pallet's first box placed; SKU change run closed with SKU_CHANGE after 10 boxes and continued on a new pallet | [Single-SKU pallets](#single-sku-pallets-acceptance-runs) |
 | 5 | Picks/min ≥ 4 in single_sku mode | 4.26–4.89 per pallet (incl. the first box's arrival), 4.55–5.04 steady; v1 1.77–2.12 | [Milestone F](#milestone-f--speed) |
-| 6 | RViz config with both debug image panels + screenshot | `palletizer_gazebo/rviz/cell.rviz` (conveyor and pallet debug images docked next to the 3D view, 2D status overlay, markers); `docs/rviz.png` | README |
+| 6 | RViz config with both debug image panels + screenshot | `palletizer_gazebo/rviz/cell.rviz` (conveyor and pallet debug images docked next to the 3D view, 2D status overlay, markers); `docs/media/rviz_full.png` | README |
 | 7 | RESULTS single-SKU table next to the v1 mixed results; docs, commits | this file; v2 mixed-mode regression next to the v1 benchmark; CLAUDE.md, README.md | git history |
 
 The catalog runs were made with the code at commit `0cec7b2` (300×200×200, and 450×350 /

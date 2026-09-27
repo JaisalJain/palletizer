@@ -38,7 +38,10 @@ handshake. Results and acceptance numbers: `docs/RESULTS.md`.
   `[build_scripts] executable = /usr/bin/env python3` so `ros2 run` uses the venv python.
 - Source order everywhere: `/opt/ros/jazzy/setup.bash` → `.venv/bin/activate` →
   `install/setup.bash`. Build with `python -m colcon build` (venv active).
-- Commit after each working milestone. Keep this file, README.md and docs/RESULTS.md current.
+- Commit after each working milestone (branch `main`; author Jaisal K Jain, no AI co-author
+  lines). Keep this file, README.md and docs/RESULTS.md current.
+- No machine-specific paths: workspace-relative defaults come from `palletizer_tools.workspace`
+  (`$PALLETIZER_WS` or the workspace the overlay was built from); test output → `test_output/`.
 
 ## Packages (`src/`)
 | Package | Type | Role |
@@ -47,12 +50,12 @@ handshake. Results and acceptance numbers: `docs/RESULTS.md`.
 | `palletizer_description` | cmake | UR10e (official macro) on 0.7 m pedestal + suction gripper, F/T sensor on `suction_cup_joint`, gz_ros2_control; starts at the park pose |
 | `palletizer_gazebo` | cmake, C++ | world xacro (no pallet: station markings, pallet lane, pallet camera), gz systems `SuctionGripper`, `ModelPosePublisher` (box_ + pallet_ GT), `PalletMover`; bridge; `sim.launch.py` (`gui`, `rviz`, `rtf`); `rviz/cell.rviz` |
 | `palletizer_interfaces` | cmake | msgs DetectedBox, Placement, BoxSpec, CycleReport, PalletReport, DetectedPallet, HeightMap, PlacementCheck, StackEvent, PackingState, PalletStatus; srvs DetectBox, PlanPlacement, CommitPlacement, Weigh, MeasurePallet, SetPallet, VerifyPlacement; actions PickBox, PlaceBox, PalletExchange |
-| `palletizer_tools` | python | box_spawner (sku / order / mixed), pallet_exchanger, conveyor_controller, cloud_relay, sim_ops, `pallet_frame.py`, `sim_client.py`, `ur_ik.py`, `cell_config.py` (role), sim tests |
+| `palletizer_tools` | python | box_spawner (sku / order / mixed), pallet_exchanger, conveyor_controller, cloud_relay, sim_ops, `pallet_frame.py`, `sim_client.py`, `ur_ik.py`, `cell_config.py` (role), `workspace.py`, sim tests |
 | `palletizer_perception` | python | `detector.py` + `box_perception` (conveyor), `pallet_detector.py` + `pallet_perception` (pallet station), `camera_model.py`, `debug_view.py`; `eval_perception`, `eval_pallet_perception` |
 | `palletizer_moveit_config` | cmake | SRDF (group `manipulator` base_link→suction_tcp), Pilz PTP/LIN + OMPL, `move_group.launch.py` |
 | `palletizer_motion` | python | `motion_server` (PickBox/PlaceBox, scene incl. measured pallet, weigh, check_placement), `moveit_client.py`, `reachability.py` + `config/reachability_ur10e.npz` (world frame, station area) |
 | `palletizer_packing` | python | `core/` (NO ROS: pallet, rules, planners, pattern, perceived, physics [pybullet], env [gymnasium], reach) + `packing_node`, `pattern_report`; pytest in `test/` |
-| `palletizer_orchestrator` | cmake, C++ + python | BT.CPP v4 `orchestrator` + `trees/palletize.xml`, `status_overlay`, `metrics_logger` (GT evaluation), `pick_place_test`, `benchmark`, `sku_runs` |
+| `palletizer_orchestrator` | cmake, C++ + python | BT.CPP v4 `orchestrator` + `trees/palletize.xml`, `status_overlay`, `metrics_logger` (GT evaluation), `pick_place_test`, `benchmark`, `sku_runs` (`--snapshot`), `sim_snapshot` (media cameras) |
 
 ## Cell layout (world = floor under the robot base axis; +x = conveyor travel)
 - UR10e `base_link` at (0, 0, 0.70) on a 0.25×0.25×0.70 m pedestal.
@@ -188,6 +191,17 @@ See README.md for the command list. Key entry points:
 `ros2 run palletizer_perception eval_pallet_perception`, `ros2 run palletizer_orchestrator
 sku_runs`, `pick_place_test`, `benchmark --prefix v2bench`. `sim_ctl.sh start|stop` (env
 `SIM_ARGS`) runs a headless manual-mode stack (a first pallet is delivered) for scripted tests.
+
+CI (`.github/workflows/`, `ros:jazzy` container): `tests` = packing + perception pytest +
+no-hardcoding (PYTHONPATH = the package sources, no build); `build` = README apt deps +
+`test_build.sh` (fails on any build warning). Validated locally with actionlint and `act`
+(act needs node in the job image: `ros:jazzy` + nodejs for local runs only).
+
+README media (`docs/media/`, keep < 15 MB): `tools/make_media.sh [--sim] [--rviz]`, one script
+per image in `tools/media/` (scratch in `tools/media/_work/`, gitignored). `--sim` re-runs four
+pallets with `sku_runs --snapshot` (CSVs stay out of `results/`); `sim_snapshot` spawns fixed
+cameras (`VIEWS`, `--view` to try poses) and saves the mid-run, FULL and exchange frames.
+`--rviz` needs a display (RViz as an X11 client, captured with xdotool + xwd).
 
 ## Known issues / gotchas
 - **Two gz-sim 8 installs** (ROS vendor 8.11 used by everything; OSRF 8.15 in /usr). Plugins link
