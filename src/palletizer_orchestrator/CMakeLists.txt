@@ -34,6 +34,7 @@ install(PROGRAMS
   scripts/pick_place_test
   scripts/status_overlay
   scripts/sku_runs
+  scripts/sim_snapshot
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

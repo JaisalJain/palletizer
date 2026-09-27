@@ -13,6 +13,9 @@ Usage: ros2 run palletizer_orchestrator sku_runs [--skus 400x300x300 ...] [--rtf
        ros2 run palletizer_orchestrator sku_runs --name unknown --sku 347x253x219 \
             --pallets 1140x760x150
        ros2 run palletizer_orchestrator sku_runs --summary-only
+       ros2 run palletizer_orchestrator sku_runs --skus 600x400x300 --snapshot docs/media/_work
+            (also saves images: mid-run, the finished pallet before the exchange, the
+             exchange; see sim_snapshot.py)
 """
 
 import argparse
@@ -34,24 +37,40 @@ END = '<!-- SKU_RUNS:END -->'
 CONFIG = os.path.join(WS, 'src', 'palletizer_bringup', 'config', 'cell_config.yaml')
 
 
-def run_one(name, launch_args, timeout, log_dir, attempt=1):
+def run_one(name, launch_args, timeout, log_dir, attempt=1, snapshot=None):
     run = f'sku_{name}'
-    for f in glob.glob(os.path.join(RESULTS, f'{run}_*.csv')):
+    # media runs (--snapshot) keep their CSVs next to the images, not in results/
+    results = os.path.join(snapshot[0], 'results') if snapshot else RESULTS
+    os.makedirs(results, exist_ok=True)
+    for f in glob.glob(os.path.join(results, f'{run}_*.csv')):
         os.remove(f)
     suffix = '' if attempt == 1 else f'_attempt{attempt}'
     log = open(os.path.join(log_dir, f'{run}{suffix}.log'), 'w')
     cmd = ['ros2', 'launch', 'palletizer_bringup', 'palletizer.launch.py', 'mode:=single_sku',
            'gui:=false', 'rviz:=false', 'max_pallets:=1', 'finish_with_next_box:=true',
-           f'run_name:={run}', f'results_dir:={RESULTS}'] + launch_args
+           f'run_name:={run}', f'results_dir:={results}'] + launch_args
     cleanup()
     t0 = time.time()
     proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+    snap = None
+    if snapshot:
+        out, hero_after = snapshot
+        snap = subprocess.Popen(
+            ['ros2', 'run', 'palletizer_orchestrator', 'sim_snapshot',
+             '--out', os.path.join(out, run), '--hero-after', str(hero_after)],
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
     try:
         proc.wait(timeout=timeout)
         status = 'ok'
     except subprocess.TimeoutExpired:
         status = 'timeout'
     finally:
+        if snap is not None and snap.poll() is None:
+            os.killpg(snap.pid, signal.SIGINT)
+            try:
+                snap.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                os.killpg(snap.pid, signal.SIGKILL)
         if proc.poll() is None:
             os.killpg(proc.pid, signal.SIGINT)
             try:
@@ -60,13 +79,13 @@ def run_one(name, launch_args, timeout, log_dir, attempt=1):
                 os.killpg(proc.pid, signal.SIGKILL)
         log.close()
         cleanup()
-    pallets = os.path.join(RESULTS, f'{run}_pallets.csv')
+    pallets = os.path.join(results, f'{run}_pallets.csv')
     rows = list(csv.DictReader(open(pallets))) if os.path.exists(pallets) else []
     print(f'{run}: {status} in {time.time() - t0:.0f} s, '
           f'{"pallet recorded" if rows else "NO pallet recorded"}', flush=True)
     if not rows and attempt < 2:
         print(f'{run}: retrying (attempt {attempt + 1})', flush=True)
-        return run_one(name, launch_args, timeout, log_dir, attempt + 1)
+        return run_one(name, launch_args, timeout, log_dir, attempt + 1, snapshot)
     return status
 
 
@@ -159,25 +178,32 @@ def main(argv=None):
     ap.add_argument('--timeout', type=float, default=7200.0)
     ap.add_argument('--extra', nargs='*', default=[], help='more launch args (key:=value)')
     ap.add_argument('--summary-only', action='store_true')
+    ap.add_argument('--snapshot', default='', metavar='DIR',
+                    help='save media snapshots of every run into DIR/sku_<name>/')
+    ap.add_argument('--hero-after', type=int, default=6,
+                    help='--snapshot: placed boxes before the mid-run shot')
     args = ap.parse_args(argv)
     catalog = yaml.safe_load(open(CONFIG))['spawner']['catalog']
-    log_dir = os.path.join(RESULTS, 'logs')
+    log_dir = os.path.join(args.snapshot or RESULTS, 'logs')
     os.makedirs(log_dir, exist_ok=True)
     common = [f'seed:={args.seed}', f'rtf:={args.rtf}'] + args.extra
+    snapshot = (os.path.abspath(args.snapshot), args.hero_after) if args.snapshot else None
     if args.pallets:
         common.append(f'pallets:={args.pallets}')
     if args.name:
         la = common + ([f'sku:={args.sku}'] if args.sku else []) + \
             ([f'order:={args.order}'] if args.order else [])
         if not args.summary_only:
-            run_one(args.name, la, args.timeout, log_dir)
-        summary(all_names(catalog))
+            run_one(args.name, la, args.timeout, log_dir, snapshot=snapshot)
+        if not snapshot:
+            summary(all_names(catalog))
         return 0
     skus = args.skus or list(catalog)
     if not args.summary_only:
         for k in skus:
-            run_one(k, common + [f'sku:={k}'], args.timeout, log_dir)
-    summary(all_names(catalog))
+            run_one(k, common + [f'sku:={k}'], args.timeout, log_dir, snapshot=snapshot)
+    if not snapshot:
+        summary(all_names(catalog))
     return 0
 
 
