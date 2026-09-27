@@ -17,7 +17,9 @@ cd "$WS"
 python -m colcon --log-base "$OUT/log" build --build-base "$OUT/build" --install-base "$OUT/install" \
   --event-handlers console_cohesion+ \
   --cmake-args -DCMAKE_BUILD_TYPE=Release > "$OUT/build.txt" 2>&1
-check $? "colcon build succeeded"
+rc=$?
+check $rc "colcon build succeeded"
+[[ $rc != 0 ]] && tail -60 "$OUT/build.txt"
 
 warnings=$(grep -iE "warning" "$OUT/build.txt" | grep -v "^--" || true)
 [[ -z $warnings ]]; check $? "no warnings in build output"

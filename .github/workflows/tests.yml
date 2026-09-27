@@ -1,0 +1,55 @@
+# Fast unit tests (no simulation, no GPU): packing core + pattern planner, pallet detector on
+# synthetic depth images, and the no-hardcoding check. The venv is set up as in the README.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install apt dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-venv python3-pip python3-numpy python3-scipy python3-opencv \
+            python3-yaml python3-pytest
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-jazzy-${{ hashFiles('requirements.txt') }}
+
+      - name: Python venv (README Setup)
+        run: |
+          python3 -m venv --system-site-packages .venv && touch .venv/COLCON_IGNORE
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Unit tests
+        env:
+          # the unit tests need only the pure-Python modules, no colcon build
+          PYTHONPATH: src/palletizer_packing:src/palletizer_perception:src/palletizer_tools
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          source .venv/bin/activate
+          python -m pytest -p no:cacheprovider \
+            src/palletizer_packing/test \
+            src/palletizer_perception/test \
+            src/palletizer_tools/test/test_no_hardcoding.py

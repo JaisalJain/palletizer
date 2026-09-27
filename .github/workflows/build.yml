@@ -1,0 +1,58 @@
+# Full colcon build of all packages with the README's apt dependencies. Uses the repo's
+# build test: a from-scratch build that fails on any warning in our packages' build output
+# and checks that the Gazebo plugins link the ROS-vendored gz-sim.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  colcon:
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Keep downloaded .debs for the cache
+        run: rm -f /etc/apt/apt.conf.d/docker-clean
+
+      - name: Cache apt archives
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/apt/archives/*.deb
+          key: apt-jazzy-${{ hashFiles('.github/workflows/build.yml') }}
+
+      - name: Install apt dependencies (README Setup)
+        run: |
+          apt-get update
+          apt-get install -y \
+            ros-jazzy-ur-description ros-jazzy-ur-simulation-gz ros-jazzy-ros-gz \
+            ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers ros-jazzy-moveit python3-scipy \
+            ros-jazzy-rviz-2d-overlay-plugins \
+            python3-venv python3-pip
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-jazzy-${{ hashFiles('requirements.txt') }}
+
+      - name: Python venv (README Setup)
+        run: |
+          python3 -m venv --system-site-packages .venv && touch .venv/COLCON_IGNORE
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: colcon build, no warnings
+        run: src/palletizer_tools/test/test_build.sh
