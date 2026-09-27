@@ -38,7 +38,13 @@ its cameras, plans interlocked layer patterns, and stacks pallet after pallet wi
     <td><b>Pallet camera</b>: pallet, stack height map, placement checks</td>
   </tr>
   <tr>
-    <td><img src="docs/media/rviz_full.png" alt="RViz: 3D view of the robot, the planned and placed boxes, both perception panels and the pallet status overlay"></td>
+    <td>
+      <!--
+        RVIZ SCREENSHOT (manual): run the demo (`… mode:=single_sku sku:=400x300x300 gui:=true`),
+        save the RViz window as docs/media/rviz_full.png (~1600 px wide) and replace this comment with:
+        <img src="docs/media/rviz_full.png" alt="RViz: 3D view of the robot, the planned and placed boxes, both perception panels and the pallet status overlay">
+      -->
+    </td>
     <td><img src="docs/media/exchange_sequence.png" alt="Four frames of a pallet exchange: full pallet at the station, leaving, new pallet arriving, new pallet in place"></td>
   </tr>
   <tr>
@@ -54,19 +60,26 @@ picks at the top-face centre and places. A BehaviorTree runs the loop and the pa
 
 ```mermaid
 flowchart LR
-  subgraph plant["Simulated plant (Gazebo)"]
-    SP[box spawner] --> CONV[zone conveyor<br/>photo-eyes]
-    PX[pallet conveyor<br/>exchanger]
+  subgraph sense["Sensing"]
+    CONV[zone conveyor<br/>photo-eyes]
+    BP[box_perception<br/>conveyor camera]
+    PP[pallet_perception<br/>pallet camera]
   end
-  CAM1([conveyor camera]) --> BP[box_perception]
-  CAM2([pallet camera]) --> PP[pallet_perception]
-  CONV -- box ready --> BT{{orchestrator<br/>BehaviorTree}}
-  BT -- DetectBox --> BP
-  BT -- PlanPlacement --> PK[packing_node<br/>layer patterns]
+  subgraph decide["Decision"]
+    BT{{orchestrator<br/>BehaviorTree}}
+    PK[packing_node<br/>layer patterns]
+  end
+  subgraph act["Actuation"]
+    MS[motion_server<br/>MoveIt 2] --> UR[UR10e<br/>+ suction]
+    PX[pallet conveyor<br/>exchange]
+  end
+  CONV -- box ready --> BT
+  BP -- carton size, grasp --> BT
+  PP -- pallet, placement checks --> BT
   PP -- height map --> PK
-  BT -- VerifyPlacement<br/>MeasurePallet --> PP
-  BT -- PickBox / PlaceBox --> MS[motion_server] --> MG[MoveIt 2] --> UR[UR10e + suction]
-  BT -- PalletExchange --> PX
+  BT <-- plan / commit --> PK
+  BT -- pick / place --> MS
+  BT -- exchange --> PX
 ```
 
 <p align="center">

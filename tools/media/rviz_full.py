@@ -72,7 +72,7 @@ def capture(path):
     img = Image.fromarray(read_xwd(data))
     if np.asarray(img).mean() < 5:
         raise RuntimeError('captured an empty (black) window')
-    common.save_png(img, path, common.FULL_W)
+    common.save_png(img, path, common.FULL_W, colors=0)
 
 
 def wait_placed(n, timeout):

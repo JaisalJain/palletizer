@@ -22,7 +22,7 @@ def main():
         if not os.path.exists(p):
             sys.exit(f'{p} missing: run tools/make_media.sh --sim first')
         # native camera resolution (640 x 480, 800 x 600): never upscaled
-        common.save_png(Image.open(p), common.out(dst), common.GRID_W)
+        common.save_png(Image.open(p), common.out(dst), common.GRID_W, colors=0)
 
 
 if __name__ == '__main__':

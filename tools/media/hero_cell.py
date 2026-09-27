@@ -21,7 +21,7 @@ def main():
     img = Image.open(src)
     w, h = img.size                     # 1920 x 1080; trim the empty floor at the bottom
     img = img.crop((0, 0, w, int(h * 0.94)))
-    common.save_png(img, common.out('hero_cell.png'), common.FULL_W)
+    common.save_png(img, common.out('hero_cell.png'), common.FULL_W, colors=0)  # lossless render
 
 
 if __name__ == '__main__':

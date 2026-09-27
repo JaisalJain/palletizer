@@ -60,13 +60,14 @@ def resize(img, width):
 
 
 def save_png(img, path, width=None, colors=256):
-    """Save a PIL image as an optimized PNG: resize, then pngquant/optipng if installed,
-    else a PIL palette quantization (dithered) when it does not hurt (<= `colors`)."""
+    """Save a PIL image as an optimized PNG: resize, then pngquant (or a PIL 256-colour
+    quantization) for flat figures; colors=0 keeps renders lossless (a palette loses small
+    saturated details). optipng afterwards if installed."""
     from PIL import Image
     img = img.convert('RGB')
     if width:
         img = resize(img, width)
-    if shutil.which('pngquant'):
+    if colors and shutil.which('pngquant'):
         img.save(path, optimize=True)
         subprocess.run(['pngquant', '--force', '--skip-if-larger', '--quality', '70-95',
                         '--output', path, path], check=False)

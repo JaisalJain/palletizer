@@ -56,7 +56,7 @@ def main():
                       common.BG)
     for i, c in enumerate(cells):
         sheet.paste(c, ((i % cols) * (CELL_W + gap), (i // cols) * (ch + gap)))
-    common.save_png(sheet, common.out('pallets_gallery.png'), common.FULL_W)
+    common.save_png(sheet, common.out('pallets_gallery.png'), common.FULL_W, colors=0)
 
 
 if __name__ == '__main__':

@@ -58,7 +58,7 @@ def main():
     sheet = Image.new('RGB', (2 * CELL_W + gap, 2 * ch + gap), common.BG)
     for i, c in enumerate(cells):
         sheet.paste(c, ((i % 2) * (CELL_W + gap), (i // 2) * (ch + gap)))
-    common.save_png(sheet, common.out('exchange_sequence.png'), common.FULL_W)
+    common.save_png(sheet, common.out('exchange_sequence.png'), common.FULL_W, colors=0)
 
 
 if __name__ == '__main__':

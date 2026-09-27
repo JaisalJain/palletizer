@@ -46,7 +46,7 @@ v2 (measured pallets, single-SKU patterns, pallet exchange) comes first; the v1 
 | 3 | Milestone B thresholds | pallet dims ≤ 3.1 mm, pose ≤ 0.5 mm / 0.17°, height map ≤ 4.2 mm on occupied cells, camera vs GT placement ≤ 0.67 mm, shoved box detected (39.9 / 29.9 mm for 40 / 30 mm), none for 10 mm, no false events | [Milestone B](#milestone-b--pallet-perception) |
 | 4 | Every catalog SKU: a full pallet unattended | 9/9 SKUs: boxes placed = pattern count, PATTERN_COMPLETE, 0 collapses (GT), 0 stack events, exchange completed and the next pallet's first box placed; SKU change run closed with SKU_CHANGE after 10 boxes and continued on a new pallet | [Single-SKU pallets](#single-sku-pallets-acceptance-runs) |
 | 5 | Picks/min ≥ 4 in single_sku mode | 4.26–4.89 per pallet (incl. the first box's arrival), 4.55–5.04 steady; v1 1.77–2.12 | [Milestone F](#milestone-f--speed) |
-| 6 | RViz config with both debug image panels + screenshot | `palletizer_gazebo/rviz/cell.rviz` (conveyor and pallet debug images docked next to the 3D view, 2D status overlay, markers); `docs/media/rviz_full.png` | README |
+| 6 | RViz config with both debug image panels + screenshot | `palletizer_gazebo/rviz/cell.rviz` (conveyor and pallet debug images docked next to the 3D view, 2D status overlay, markers); screenshot in the README | README |
 | 7 | RESULTS single-SKU table next to the v1 mixed results; docs, commits | this file; v2 mixed-mode regression next to the v1 benchmark; CLAUDE.md, README.md | git history |
 
 The catalog runs were made with the code at commit `0cec7b2` (300×200×200, and 450×350 /

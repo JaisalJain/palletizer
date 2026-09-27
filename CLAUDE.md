@@ -201,7 +201,8 @@ README media (`docs/media/`, keep < 15 MB): `tools/make_media.sh [--sim] [--rviz
 per image in `tools/media/` (scratch in `tools/media/_work/`, gitignored). `--sim` re-runs four
 pallets with `sku_runs --snapshot` (CSVs stay out of `results/`); `sim_snapshot` spawns fixed
 cameras (`VIEWS`, `--view` to try poses) and saves the mid-run, FULL and exchange frames.
-`--rviz` needs a display (RViz as an X11 client, captured with xdotool + xwd).
+`--rviz` (optional; the README RViz screenshot and the hero video are added by hand) needs a
+display (RViz as an X11 client, captured with xdotool + xwd).
 
 ## Known issues / gotchas
 - **Two gz-sim 8 installs** (ROS vendor 8.11 used by everything; OSRF 8.15 in /usr). Plugins link

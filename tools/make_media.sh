@@ -5,7 +5,8 @@
 #                                  sim images assembled from existing snapshot runs
 #   tools/make_media.sh --sim      first re-run the four snapshot pallets (headless Gazebo,
 #                                  ~1 h wall): sku_runs --snapshot tools/media/_work/runs
-#   tools/make_media.sh --rviz     also capture RViz (needs a display; opens an RViz window)
+#   tools/make_media.sh --rviz     also capture RViz (needs a display; opens an RViz window).
+#                                  Optional: the README's RViz screenshot is taken by hand.
 #   tools/make_media.sh --all      --sim + --rviz
 #
 # Environment: ROS, then the project venv, then the workspace overlay (sourced here).
