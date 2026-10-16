@@ -171,7 +171,13 @@ class PickPlaceTest:
             self.swap()
             row['pallet_swap_after'] = 1
             pl = sim.call(self.plan, PlanPlacement.Request(box=box, mass=pr.measured_mass),
-                      timeout=PLAN_TIMEOUT)
+                          timeout=PLAN_TIMEOUT)
+        if not pl.success:          # no slot even on a fresh pallet: never place an empty plan
+            row['outcome'] = f'plan_failed: {pl.reason} {pl.message}'
+            self.trig('reject_held')
+            self.trig('drop_held')
+            self.trig('park')
+            return row
         before = {n: sim.box_poses[n][0].copy() for n in self.on_pallet if n in sim.box_poses}
         rr = self.action(self.place, PlaceBox.Goal(placement=pl.placement, box=box))
         if not rr.success:          # same recovery as the behavior tree: re-plan elsewhere

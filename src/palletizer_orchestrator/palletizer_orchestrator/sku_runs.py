@@ -125,9 +125,13 @@ def summary(names):
         pat = f'{r["boxes_in_pattern"]}'
         opt = ''
         # optimum per layer (deck, no reachability) and per-layer counts from the log
-        log = os.path.join(RESULTS, 'logs', f'sku_{name}.log')
+        # the log of the attempt that produced the result (the last one, after a retry)
+        logs = [os.path.join(RESULTS, 'logs', f'sku_{name}{s}.log')
+                for s in ('', '_attempt2', '_attempt3')]
+        logs = [p for p in logs if os.path.exists(p)]
+        log = logs[-1] if logs else ''
         per_layer = ''
-        if os.path.exists(log):
+        if log:
             for line in open(log):
                 if 'pattern for' in line and '(optimum' in line:
                     seg = line.split('mm (usable')[1]

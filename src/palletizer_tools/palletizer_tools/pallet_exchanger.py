@@ -36,7 +36,7 @@ from std_msgs.msg import String
 from std_srvs.srv import Trigger
 from tf2_msgs.msg import TFMessage
 
-from palletizer_tools import boxes, cell_config
+from palletizer_tools import boxes, cell_config, sim_time
 
 WOOD = (0.72, 0.56, 0.36, 1.0)
 
@@ -171,6 +171,11 @@ class PalletExchanger(Node):
             time.sleep(period)
         return cond()
 
+    def wait_sim(self, cond, timeout):
+        """Wait for something the simulation does (pallet travel, a model appearing) in sim
+        time: a full interlocked pallet drops the RTF to ~0.04, so 8 s of travel take minutes."""
+        return sim_time.wait(self, cond, timeout, period=0.05)
+
     def call(self, cli, req, timeout=10.0):
         if not cli.wait_for_service(timeout_sec=timeout):
             return None
@@ -205,7 +210,7 @@ class PalletExchanger(Node):
         mid = self.move_id
         self.mover_pub.publish(String(data=f'move {mid} {dx:.4f} {dy:.4f} {self.ex["speed"]} '
                                            f'{self.ex["accel"]} ' + ' '.join(names)))
-        return self.wait_for(lambda: self.mover_state == f'idle {mid}', timeout)
+        return self.wait_sim(lambda: self.mover_state == f'idle {mid}', timeout)
 
     def delete(self, name):
         req = DeleteEntity.Request()
@@ -243,7 +248,7 @@ class PalletExchanger(Node):
         if res is None or not res.success:
             return False, f'spawn of {name} failed', name
         self.pallets[name] = size
-        if not self.wait_for(lambda: name in self.pallet_poses, 10.0):
+        if not self.wait_sim(lambda: name in self.pallet_poses, 10.0):
             return False, f'{name} not visible in ground truth', name
         feedback('new pallet in', 0.6)
         if not self.move([name], tx - self.ex['entry_x'], 0.0):
@@ -266,7 +271,7 @@ class PalletExchanger(Node):
         feedback('remove full pallet', 0.45)
         ok = all(self.delete(n) for n in names)
         self.pallets.pop(pallet, None)
-        self.wait_for(lambda: pallet not in self.pallet_poses, 5.0)
+        self.wait_sim(lambda: pallet not in self.pallet_poses, 5.0)
         return ok, f'{pallet} removed with {len(names) - 1} boxes'
 
     def exchange(self, feedback, pallet_type=''):

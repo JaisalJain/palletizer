@@ -122,6 +122,11 @@ def main(argv=None):
         w.writerows(rows)
 
     ok_rows = [r for r in rows if r['success']]
+    if not ok_rows:
+        print(f'\nperception eval: 0/{len(rows)} detections, csv {path}\n  [FAIL] detections')
+        sim.shutdown()
+        rclpy.try_shutdown()
+        return 1
     dim_err = np.array([[r['err_L_mm'], r['err_W_mm'], r['err_H_mm']] for r in ok_rows])
     center = np.array([r['err_center_mm'] for r in ok_rows])
     yawe = np.array([r['err_yaw_deg'] for r in ok_rows])

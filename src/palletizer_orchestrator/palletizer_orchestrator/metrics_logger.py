@@ -13,7 +13,7 @@ Outputs (CSV in results_dir):
                     mean planning time, measured pallet / SKU, pattern count, end reason
   <run>_placement_checks.csv  camera-measured placement error vs ground truth per box
 Ground-truth collapse detector (to evaluate perception's): every placed box's ground-truth
-pose is recorded `settle_time` after it is reported; any later drift > collapse_threshold
+pose is recorded `settle_time` (sim time, wall-capped) after it is reported; any later drift > collapse_threshold
 (20 mm) counts as one collapse.
 Publishes /metrics/summary (String JSON) after every pallet.
 """
@@ -34,7 +34,7 @@ from scipy.spatial.transform import Rotation
 from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 
-from palletizer_tools import boxes, workspace
+from palletizer_tools import boxes, sim_time, workspace
 
 BOX_FIELDS = [
     'run', 'planner', 'seed', 'pallet', 'box_index', 'sim_name', 'outcome', 'success',
@@ -86,7 +86,7 @@ class MetricsLogger(Node):
 
         self.specs = {}
         self.poses = {}
-        self.pending = []          # (due_time, report) waiting for the box to settle
+        self.pending = []          # (due sim time, due wall time, report): box settling
         self.tracked = {}          # name -> reference pose (pos, quat) on the current pallet
         self.collapsed = set()
         self.lost = set()          # boxes that left the belt/pallet (floor), whole run
@@ -118,7 +118,10 @@ class MetricsLogger(Node):
         self.poses = boxes.poses_from_tf(msg)
 
     def on_cycle(self, r):
-        self.pending.append((time.monotonic() + self.settle, r))
+        # settle in sim time (the RTF drops to ~0.04 with big stacks); the wall cap only
+        # guards against a stopped clock
+        self.pending.append((sim_time.now(self) + self.settle,
+                             time.monotonic() + 10.0 * self.settle + 30.0, r))
         if r.success:
             self.stamps.setdefault(r.pallet_index, []).append(
                 (r.stamp.sec + r.stamp.nanosec * 1e-9, time.time()))
@@ -220,20 +223,21 @@ class MetricsLogger(Node):
 
     def tick(self):
         self.check_lost()
-        now = time.monotonic()
-        due = [x for x in self.pending if x[0] <= now]
-        self.pending = [x for x in self.pending if x[0] > now]
-        for _, r in due:
+        now, wall = sim_time.now(self), time.monotonic()
+        is_due = lambda x: x[0] <= now or x[1] <= wall  # noqa: E731
+        due = [x for x in self.pending if is_due(x)]
+        self.pending = [x for x in self.pending if not is_due(x)]
+        for _, _, r in due:
             self.finalize_box(r)
         self.check_collapses()
 
     # ------------------------------------------------------------------ per pallet
     def on_pallet(self, r):
         # finish boxes still settling first; check collapses on the final pallet state
-        for _, c in self.pending:
+        for _, _, c in self.pending:
             if c.pallet_index == r.pallet_index:
                 self.finalize_box(c)
-        self.pending = [x for x in self.pending if x[1].pallet_index != r.pallet_index]
+        self.pending = [x for x in self.pending if x[2].pallet_index != r.pallet_index]
         self.check_collapses()
         rows = [x for x in self.rows if x['pallet'] == r.pallet_index]
         placed = [x for x in rows if x['success'] == 1]
