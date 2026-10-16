@@ -207,12 +207,15 @@ nothing is inside the robot reach, pallet lane, conveyor, photo-eye beams or cam
 conveyor camera's image corners see the north fence base, outside its ROI). `model://` lookup via
 the package env hook + `sim.launch.py`. `.blend` files and renders stay out of git.
 
-README media (`docs/media/`, keep < 15 MB): `tools/make_media.sh [--sim] [--rviz]`, one script
-per image in `tools/media/` (scratch in `tools/media/_work/`, gitignored). `--sim` re-runs four
-pallets with `sku_runs --snapshot` (CSVs stay out of `results/`); `sim_snapshot` spawns fixed
+README media (`docs/media/`, keep < 15 MB): `tools/make_media.sh [--sim] [--rviz] [--gif]`, one
+script per image in `tools/media/` (scratch in `tools/media/_work/`, gitignored). `--sim` re-runs
+four pallets with `sku_runs --snapshot` (CSVs stay out of `results/`); `sim_snapshot` spawns fixed
 cameras (`VIEWS`, `--view` to try poses) and saves the mid-run, FULL and exchange frames.
-`--rviz` (optional; `tools/media/rviz_full.py` makes `rviz_full.png`; the hero video is added by hand) needs a
-display (RViz as an X11 client, captured with xdotool + xwd).
+`--rviz` (`rviz_full.py` -> `rviz_full.png`) needs a display (RViz as an X11 client, captured
+with xdotool + xwd). `--gif` (`record_gif.py` -> `warehouse_demo.gif`, the README top): headless
+warehouse run, a gz camera sensor for the recording only, frames saved with sim stamps (one cycle
++ the exchange), resampled at 12.5 fps on the sim clock (1x whatever the RTF), cuts only;
+`--encode-only` re-encodes the last recording.
 
 ## Known issues / gotchas
 - **Two gz-sim 8 installs** (ROS vendor 8.11 used by everything; OSRF 8.15 in /usr). Plugins link

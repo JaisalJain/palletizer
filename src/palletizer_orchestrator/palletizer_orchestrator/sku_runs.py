@@ -1,7 +1,7 @@
 """Single-SKU acceptance runs: one full pallet per SKU, headless, unattended.
 
 Each run is a fresh simulation:
-    ros2 launch palletizer_bringup palletizer.launch.py mode:=single_sku sku:=<key>
+    ros2 launch palletizer_bringup palletizer.launch.py mode:=single_sku sku:=<key> gui:=false
          max_pallets:=1 finish_with_next_box:=true seed:=<s> rtf:=<rtf> run_name:=sku_<key>
 It ends when the first pallet is FULL, the exchange has brought the next pallet and its first
 box is placed. Extra runs: `--order` (a SKU change mid-stream, closed with SKU_CHANGE) and any

@@ -13,8 +13,8 @@ Outputs (CSV in results_dir):
                     mean planning time, measured pallet / SKU, pattern count, end reason
   <run>_placement_checks.csv  camera-measured placement error vs ground truth per box
 Ground-truth collapse detector (to evaluate perception's): every placed box's ground-truth
-pose is recorded `settle_time` (sim time, wall-capped) after it is reported; any later drift > collapse_threshold
-(20 mm) counts as one collapse.
+pose is recorded `settle_time` (sim time, wall-capped) after it is reported; any later drift >
+collapse_threshold (20 mm) counts as one collapse.
 Publishes /metrics/summary (String JSON) after every pallet.
 """
 

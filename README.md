@@ -11,13 +11,7 @@ its cameras, plans interlocked layer patterns, and stacks pallet after pallet wi
 [![build](https://github.com/JaisalJain/palletizer/actions/workflows/build.yml/badge.svg)](https://github.com/JaisalJain/palletizer/actions/workflows/build.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
-<!--
-  HERO VIDEO: on github.com, open README.md → Edit (pencil), drag the .mp4 into the editor.
-  GitHub uploads it and inserts a line like https://github.com/user-attachments/assets/<id>.
-  Put that URL on its own line right here (it renders as a video player), then delete the
-  image line below or keep it as a poster under the video.
--->
-![The palletizing cell in Gazebo: a UR10e carries a carton from the conveyor to a stack in progress on the pallet station](docs/media/hero_cell.png)
+![The Gazebo simulation in the warehouse world at real speed: a carton arrives on the conveyor, the UR10e picks it at the top-face centre, lifts and weighs it, carries it level and places it on the stack; then the full pallet leaves on the pallet conveyor and a new empty pallet arrives](docs/media/warehouse_demo.gif)
 
 ## Highlights
 
@@ -98,11 +92,21 @@ the pallet lane, the photo-eye beams or the cameras' ROIs (checked by a keep-out
 the roof and walls cast no shadows. The default `world:=plain` is unchanged. Rebuild it with
 [tools/warehouse_blender](tools/warehouse_blender/README.md).
 
-![world:=warehouse in Gazebo: the fenced UR10e carries a carton from the conveyor to a stack in progress, racking and a stretch wrapper behind](docs/media/warehouse_gazebo.jpg)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/media/hero_cell.png" alt="world:=plain in Gazebo: the UR10e carries a carton from the conveyor to a stack in progress on the pallet station"></td>
+    <td width="50%"><img src="docs/media/warehouse_gazebo.jpg" alt="world:=warehouse in Gazebo: the fenced UR10e carries a carton from the conveyor to a stack in progress, racking and a stretch wrapper behind"></td>
+  </tr>
+  <tr>
+    <td><code>world:=plain</code> (default)</td>
+    <td><code>world:=warehouse</code></td>
+  </tr>
+</table>
 
 ## Quick start
 
-Ubuntu 24.04, ROS 2 Jazzy, Gazebo Harmonic (gz-sim 8).
+Ubuntu 24.04, ROS 2 Jazzy, Gazebo Harmonic (gz-sim 8). Gazebo and RViz open by default;
+`gui:=false` runs headless.
 
 <details>
 <summary><b>Setup</b> (once)</summary>
