@@ -226,6 +226,25 @@
               <geometry><box><size>0.01 0.04 0.05</size></box></geometry>
               <xacro:material rgba="${[0.9, 0.1, 0.1, 1]}"/>
             </visual>
+            <!-- Posts and floor plates under both heads (visual only, like the heads). Each post
+                 stays inside its head's footprint (the overhead camera sees only the head), ends
+                 under the head (below the beam and below min_object_height above the belt). -->
+            <xacro:property name="eye_z" value="${cv['belt_top_z'] + eye['height']}"/>
+            <xacro:property name="post_h" value="${eye_z - 0.025}"/>
+            <xacro:macro name="eye_post" params="name x sx sy">
+              <visual name="${name}_post">
+                <pose>${x} 0 ${-0.025 - post_h / 2} 0 0 0</pose>
+                <geometry><box><size>${sx} ${sy} ${post_h}</size></box></geometry>
+                <xacro:material rgba="${[0.2, 0.22, 0.25, 1]}"/>
+              </visual>
+              <visual name="${name}_foot">
+                <pose>${x} 0 ${0.005 - eye_z} 0 0 0</pose>
+                <geometry><box><size>0.10 0.10 0.01</size></box></geometry>
+                <xacro:material rgba="${[0.2, 0.22, 0.25, 1]}"/>
+              </visual>
+            </xacro:macro>
+            <xacro:eye_post name="emitter" x="0" sx="0.02" sy="0.02"/>
+            <xacro:eye_post name="reflector" x="${cv['belt_width'] + 2 * eye['offset']}" sx="0.008" sy="0.03"/>
             <sensor name="eye_${z['name']}" type="gpu_lidar">
               <always_on>true</always_on>
               <update_rate>${eye['rate']}</update_rate>

@@ -67,7 +67,8 @@ handshake. Results and acceptance numbers: `docs/RESULTS.md`.
   Controller (`conveyor_controller.py`): one box per downstream zone (occupancy counted from
   debounced eye edges; a zone releases only into an EMPTY zone), eye changes ignored while the
   zone's belt is stopped (the pick eye clearing must hold 0.5 s), readings below the lidar's min
-  range count as blocked (overhanging boxes), eye posts 0.12 m outside the belt, transit
+  range count as blocked (overhanging boxes), eye posts 0.12 m outside the belt (visual-only
+  posts + floor plates inside each head's footprint, below the beam), transit
   watchdog as a safety net. The pick zone never runs while its eye is blocked (`resume` only
   clears the hold).
 - Pallet station: AREA 1.32×0.92 m centred (0, −0.60) (all the robot knows). Pallet lane along +x at
@@ -224,6 +225,11 @@ warehouse run, a gz camera sensor for the recording only, frames saved with sim 
 - gz principal point: pixel i is centred at i + 0.5 (`pixel_center_offset`), both cameras.
 - ros_gz_bridge drops names from SceneBroadcaster Pose_V → `ModelPosePublisher` (one instance per
   prefix; world models must not start with `box_` / `pallet_`).
+- PalletMover teleports the carried models (WorldPoseCmd) AND commands every link's velocity
+  (conveyor velocity, no rotation; zero on the last step). With poses only, gravity accumulated
+  between teleports and the boxes of a moving stack sank / tilted in the render while
+  `/sim/box_poses` (model poses = the commanded pose) showed 0.0 mm: check link poses or a
+  render, not the model GT, for body motion during a move.
 - Large images/clouds need reliable QoS (best effort loses fragments).
 - rclpy: don't call `Executor.shutdown()` while `spin()` runs in another thread (use a spin_once
   loop + join; see `sim_client.py`).
