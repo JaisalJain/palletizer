@@ -37,7 +37,7 @@ target_link_libraries(palletizer_pallet_mover
 
 install(TARGETS palletizer_suction_gripper palletizer_model_pose_publisher palletizer_pallet_mover
   LIBRARY DESTINATION lib)
-install(DIRECTORY config launch rviz worlds DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY config launch models rviz worlds DESTINATION share/${PROJECT_NAME})
 
 ament_environment_hooks("${CMAKE_CURRENT_SOURCE_DIR}/hooks/${PROJECT_NAME}.dsv.in")
 

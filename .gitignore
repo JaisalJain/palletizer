@@ -27,3 +27,11 @@ tools/media/_work/
 .idea/
 *.swp
 .DS_Store
+
+# Blender (tools/warehouse_blender): scenes and renders stay out of git;
+# without $ROBOT_WORLD the scripts write assets/, renders/ and *.blend into tools/
+*.blend
+*.blend1
+tools/assets/
+tools/renders/
+_render_job.py

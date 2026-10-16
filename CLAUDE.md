@@ -32,7 +32,9 @@ handshake. Results and acceptance numbers: `docs/RESULTS.md`.
   detection and placement verification for the robot are done by pallet_perception.
 - All geometry and tunables live in `palletizer_bringup/config/cell_config.yaml`. Acceptance
   thresholds (`perception_eval`, `pallet_perception_eval`, `pick_place_test`) are never loosened.
-- Everything runs headless by default (`gui:=false`, 8 GB VRAM laptop); GUI only for the demo.
+- Gazebo + RViz open by default (`gui:=true`, user decision 2026-10-16: most runs want the GUI).
+  Every scripted run (sim_ctl.sh, benchmark, sku_runs, rviz_full.py, tests) passes `gui:=false`
+  explicitly (8 GB VRAM laptop; the GUI also lowers the RTF: 0.79 vs 0.86 headless).
 - Python deps not in apt (pybullet, gymnasium) live in `.venv` (requirements.txt, numpy pinned
   to the apt version); only `palletizer_packing` imports them. ament_python packages set
   `[build_scripts] executable = /usr/bin/env python3` so `ros2 run` uses the venv python.
@@ -46,9 +48,9 @@ handshake. Results and acceptance numbers: `docs/RESULTS.md`.
 ## Packages (`src/`)
 | Package | Type | Role |
 |---|---|---|
-| `palletizer_bringup` | cmake | `config/cell_config.yaml`, `launch/palletizer.launch.py` (`mode:=manual\|mixed\|single_sku`, `auto` = mixed) |
+| `palletizer_bringup` | cmake | `config/cell_config.yaml`, `launch/palletizer.launch.py` (`mode:=manual\|mixed\|single_sku`, `auto` = mixed; `world:=plain\|warehouse`, default plain) |
 | `palletizer_description` | cmake | UR10e (official macro) on 0.7 m pedestal + suction gripper, F/T sensor on `suction_cup_joint`, gz_ros2_control; starts at the park pose |
-| `palletizer_gazebo` | cmake, C++ | world xacro (no pallet: station markings, pallet lane, pallet camera), gz systems `SuctionGripper`, `ModelPosePublisher` (box_ + pallet_ GT), `PalletMover`; bridge; `sim.launch.py` (`gui`, `rviz`, `rtf`); `rviz/cell.rviz` |
+| `palletizer_gazebo` | cmake, C++ | world xacro (no pallet: station markings, pallet lane, pallet camera; `environment:=plain\|warehouse`), `models/palletizer_warehouse` (Blender-built set dressing, from `tools/warehouse_blender`), gz systems `SuctionGripper`, `ModelPosePublisher` (box_ + pallet_ GT), `PalletMover`; bridge; `sim.launch.py` (`gui`, `rviz`, `rtf`, `world`); `rviz/cell.rviz` |
 | `palletizer_interfaces` | cmake | msgs DetectedBox, Placement, BoxSpec, CycleReport, PalletReport, DetectedPallet, HeightMap, PlacementCheck, StackEvent, PackingState, PalletStatus; srvs DetectBox, PlanPlacement, CommitPlacement, Weigh, MeasurePallet, SetPallet, VerifyPlacement; actions PickBox, PlaceBox, PalletExchange |
 | `palletizer_tools` | python | box_spawner (sku / order / mixed), pallet_exchanger, conveyor_controller, cloud_relay, sim_ops, `pallet_frame.py`, `sim_client.py`, `ur_ik.py`, `cell_config.py` (role), `workspace.py`, sim tests |
 | `palletizer_perception` | python | `detector.py` + `box_perception` (conveyor), `pallet_detector.py` + `pallet_perception` (pallet station), `camera_model.py`, `debug_view.py`; `eval_perception`, `eval_pallet_perception` |
@@ -197,11 +199,19 @@ no-hardcoding (PYTHONPATH = the package sources, no build); `build` = README apt
 `test_build.sh` (fails on any build warning). Validated locally with actionlint and `act`
 (act needs node in the job image: `ros:jazzy` + nodejs for local runs only).
 
+Warehouse world (`world:=warehouse`): `tools/warehouse_blender/` builds it in Blender 5 from
+`cell_config.yaml` and exports `palletizer_gazebo/models/palletizer_warehouse` (OBJ visuals + 18
+static collision boxes; roof/walls cast no shadows; floor visual replaces the plain ground visual,
+collision stays the world's ground_plane). Set dressing only: `offline/wh_verify.py` checks that
+nothing is inside the robot reach, pallet lane, conveyor, photo-eye beams or camera ROIs (the
+conveyor camera's image corners see the north fence base, outside its ROI). `model://` lookup via
+the package env hook + `sim.launch.py`. `.blend` files and renders stay out of git.
+
 README media (`docs/media/`, keep < 15 MB): `tools/make_media.sh [--sim] [--rviz]`, one script
 per image in `tools/media/` (scratch in `tools/media/_work/`, gitignored). `--sim` re-runs four
 pallets with `sku_runs --snapshot` (CSVs stay out of `results/`); `sim_snapshot` spawns fixed
 cameras (`VIEWS`, `--view` to try poses) and saves the mid-run, FULL and exchange frames.
-`--rviz` (optional; the README RViz screenshot and the hero video are added by hand) needs a
+`--rviz` (optional; `tools/media/rviz_full.py` makes `rviz_full.png`; the hero video is added by hand) needs a
 display (RViz as an X11 client, captured with xdotool + xwd).
 
 ## Known issues / gotchas
@@ -231,8 +241,10 @@ display (RViz as an X11 client, captured with xdotool + xwd).
   above ~0.8 m (world) next to the pedestal block the upper arm for some far targets; the
   offline map cannot know (no boxes) → the pattern's motion check drops those top-layer slots.
 - Timeouts that wait for sim-time events (fresh frames, suction confirm, settles, F/T windows,
-  pallet-camera views, the packing map wait) use node time with a wall cap
-  (`palletizer_tools/sim_time.py`): with big interlocked stacks the RTF falls to ~0.03–0.1.
+  pallet-camera views, the packing map wait, the BT's service / wait timeouts (`SimTimer` in
+  `orchestrator.cpp`), pallet travel in the exchanger, the metrics logger's settle) use node time
+  with a wall cap (`palletizer_tools/sim_time.py`): with big interlocked stacks the RTF falls to
+  ~0.03–0.1 (a full pallet's 8 s exit then takes minutes of wall time).
 - Pilz LIN at 0.6 m/s sometimes exceeds a joint limit near wrist reconfigurations → the same line
   is re-planned at 0.25, then 0.1 (arm nearly stretched at far top corners;
   `motion.lin_fallback_scaling`).
@@ -250,6 +262,13 @@ display (RViz as an X11 client, captured with xdotool + xwd).
   pallet_exchanger / pallet_perception): gz/move_group can outlive `ros2 launch`, and a leftover
   controller_manager breaks the next run's controller spawners. `sim_ctl.sh`, the benchmark and
   sku_runs do this automatically. Don't start a second sim while a batch is running.
+- GUI from the VS Code snap terminal: gz sim gui / RViz die with a `/snap/core20 ... libpthread`
+  symbol error (the snap exports GTK_PATH, GTK_EXE_PREFIX, LOCPATH, GIO_MODULE_DIR, GDK_PIXBUF_*,
+  XDG_DATA_DIRS). Use a normal terminal or `env -u GTK_PATH -u GTK_EXE_PREFIX -u LOCPATH ...`.
+  Headless runs are unaffected.
+- After a ROS apt upgrade an old `build/` cache can point at a removed library version (e.g.
+  `No rule to make target .../libfastcdr.so.2.2.7`): rebuild that package with
+  `--cmake-clean-cache`.
 - The metrics logger keeps a box ledger: `lost_boxes` = boxes below belt level outside the station
   area and lane (knocked off). GT collapses = placed boxes drifting > 20 mm (evaluation of
   pallet_perception's stack events).
