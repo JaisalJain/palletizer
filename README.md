@@ -106,21 +106,24 @@ the roof and walls cast no shadows. The default `world:=plain` is unchanged. Reb
 ## Quick start
 
 Ubuntu 24.04, ROS 2 Jazzy, Gazebo Harmonic (gz-sim 8). Gazebo and RViz open by default;
-`gui:=false` runs headless.
+`gui:=false` runs headless. Tested on a machine with a GPU (the cameras are rendered); headless
+runs without a GPU are untested.
 
 <details>
 <summary><b>Setup</b> (once)</summary>
 
 ```bash
+sudo apt update
 sudo apt install ros-jazzy-ur-description ros-jazzy-ur-simulation-gz ros-jazzy-ros-gz \
   ros-jazzy-gz-ros2-control ros-jazzy-ros2-controllers ros-jazzy-moveit python3-scipy \
-  ros-jazzy-rviz-2d-overlay-plugins ros-jazzy-behaviortree-cpp
+  ros-jazzy-rviz-2d-overlay-plugins ros-jazzy-behaviortree-cpp \
+  python3-venv python3-dev build-essential
 git clone https://github.com/JaisalJain/palletizer.git palletizer_ws
 cd palletizer_ws
 python3 -m venv --system-site-packages .venv && touch .venv/COLCON_IGNORE
 source /opt/ros/jazzy/setup.bash
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt   # builds pybullet from source: takes a few minutes
 python -m colcon build
 source install/setup.bash
 ```
@@ -131,6 +134,12 @@ source install/setup.bash
 ```bash
 source /opt/ros/jazzy/setup.bash && source .venv/bin/activate && source install/setup.bash
 ```
+
+**Expected output.** A few MoveIt `PLANNING_FAILED` / `Joint deceleration limit ... violated`
+errors mid-run are normal: the motion server re-plans that move more slowly. When a run ends
+(e.g. `max_pallets:=1`), `process has died [... exit code -2]` lines for every node and a
+`move_group` crash are normal shutdown noise. The run succeeded if the pallet completes
+(`pallet 0 FULL (PATTERN_COMPLETE)`) and `ros2 launch` exits with 0.
 
 ## Try it
 
