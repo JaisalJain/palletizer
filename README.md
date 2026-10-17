@@ -272,7 +272,7 @@ src/palletizer_tools/test/sim_ctl.sh stop
 
 ## Roadmap
 
-- **Next: an RL packing planner** with robot-feasibility constraints (reachability, motion
+- **Future work: an RL packing planner** with robot-feasibility constraints (reachability, motion
   validity, stability), trained on the existing `PalletizingEnv` (gymnasium; built and tested,
   not trained yet).
 
