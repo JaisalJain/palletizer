@@ -455,7 +455,7 @@ distortion, no blur and no mixed pixels at depth edges; the only error source is
 Gaussian depth noise, which averaging and the plane intersection suppress. A real sensor
 will be several mm worse; the thresholds leave room for that.
 
-**Touching boxes** (`src/palletizer_perception/test/test_perception_touching.py`, 1 mm gap):
+**Touching boxes** (`src/palletizer_perception/test/sim_perception_touching.py`, 1 mm gap):
 
 | Case | Result |
 |---|---|

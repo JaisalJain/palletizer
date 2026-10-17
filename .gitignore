@@ -18,6 +18,9 @@ results/*_seed-1_*
 *.bag
 *.mcap
 rosbag2_*/
+*.db3
+*.orig
+*.rej
 
 # media build scratch (tools/make_media.sh keeps only docs/media)
 tools/media/_work/

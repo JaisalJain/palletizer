@@ -44,7 +44,7 @@ def main():
     sim.call(sim.stop_cli, Trigger.Request())
     sim.delete_all_boxes()
     failed = 0
-    print('== test_perception_touching')
+    print('== sim_perception_touching')
     for label, sa, sb, ca, cb, may_fail in CASES:
         xa = eye - x_extent(sa, 0) / 2 - 0.01
         xb = xa - sa[0] / 2 - sb[0] / 2 - 0.001          # touching (1 mm)
@@ -74,7 +74,7 @@ def main():
         failed += not ok
         sim.delete_all_boxes()
     sim.call(sim.resume_cli, Trigger.Request())
-    print(f'test_perception_touching: {"PASS" if not failed else f"FAIL ({failed})"}')
+    print(f'sim_perception_touching: {"PASS" if not failed else f"FAIL ({failed})"}')
     sim.shutdown()
     rclpy.try_shutdown()
     return 1 if failed else 0

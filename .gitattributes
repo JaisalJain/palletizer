@@ -1,0 +1,4 @@
+# 3D model assets (exported from tools/warehouse_blender): text formats, but not reviewable
+# source. Count them as binary in diffs and collapse them in GitHub reviews.
+*.obj -diff linguist-generated=true
+*.mtl linguist-generated=true
