@@ -5,9 +5,11 @@
 #                                  sim images assembled from existing snapshot runs
 #   tools/make_media.sh --sim      first re-run the four snapshot pallets (headless Gazebo,
 #                                  ~1 h wall): sku_runs --snapshot tools/media/_work/runs
-#   tools/make_media.sh --rviz     also capture RViz (needs a display; opens an RViz window).
-#                                  Optional: the README's RViz screenshot is taken by hand.
-#   tools/make_media.sh --all      --sim + --rviz
+#   tools/make_media.sh --rviz     also capture RViz (needs a display; opens an RViz window):
+#                                  docs/media/rviz_full.png
+#   tools/make_media.sh --gif      also record the README GIF (headless Gazebo, warehouse world,
+#                                  ~15 min wall): docs/media/warehouse_demo.gif
+#   tools/make_media.sh --all      --sim + --rviz + --gif
 #
 # Environment: ROS, then the project venv, then the workspace overlay (sourced here).
 # Needs graphviz (dot). Uses pngquant / optipng when installed, else PIL quantization.
@@ -19,13 +21,14 @@ source "$WS/install/setup.bash"
 set -u
 M=$WS/tools/media
 RUNS=$M/_work/runs
-SIM=0; RVIZ=0
+SIM=0; RVIZ=0; GIF=0
 for a in "$@"; do
   case $a in
     --sim) SIM=1 ;;
     --rviz) RVIZ=1 ;;
-    --all) SIM=1; RVIZ=1 ;;
-    *) echo "usage: $0 [--sim] [--rviz] [--all]" >&2; exit 2 ;;
+    --gif) GIF=1 ;;
+    --all) SIM=1; RVIZ=1; GIF=1 ;;
+    *) echo "usage: $0 [--sim] [--rviz] [--gif] [--all]" >&2; exit 2 ;;
   esac
 done
 
@@ -40,6 +43,9 @@ if [[ $SIM == 1 ]]; then
 fi
 if [[ $RVIZ == 1 ]]; then
   python3 "$M/rviz_full.py"
+fi
+if [[ $GIF == 1 ]]; then
+  python3 "$M/record_gif.py"
 fi
 
 python3 "$M/patterns.py"

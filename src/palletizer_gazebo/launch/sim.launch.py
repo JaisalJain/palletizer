@@ -3,10 +3,11 @@
 Structure follows ur_simulation_gz/launch/ur_sim_control.launch.py.
 
 Args:
-  gui:=true|false          Gazebo GUI (false = headless server with headless rendering)
+  gui:=true|false          Gazebo GUI (default true; false = headless server, headless rendering)
   rviz:=true|false         RViz (defaults to the value of gui)
   cell_config:=<path>      cell_config.yaml (default: palletizer_bringup/config/cell_config.yaml)
   rtf:=<float>             Gazebo real-time factor (default 1.0)
+  world:=plain|warehouse   plain cell (default) or the cell inside the Blender-built warehouse
 """
 
 import os
@@ -17,6 +18,7 @@ import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
+    AppendEnvironmentVariable,
     DeclareLaunchArgument,
     IncludeLaunchDescription,
     OpaqueFunction,
@@ -74,7 +76,8 @@ def launch_setup(context, *args, **kwargs):
     world_xml = xacro.process_file(
         os.path.join(gz_share, 'worlds', 'palletizing_cell.sdf.xacro'),
         mappings={'cell_config': cell_config,
-                  'real_time_factor': LaunchConfiguration('rtf').perform(context)}).toxml()
+                  'real_time_factor': LaunchConfiguration('rtf').perform(context),
+                  'environment': LaunchConfiguration('world').perform(context)}).toxml()
     with open(world_file, 'w') as f:
         f.write(world_xml)
 
@@ -157,7 +160,10 @@ def launch_setup(context, *args, **kwargs):
                    'pallet_camera_link', 'pallet_camera_optical_frame'),
     ]
 
-    nodes = [gazebo, spawn_robot, robot_state_publisher, bridge, cloud_relay,
+    # model:// lookup for the warehouse (also exported by the package's environment hook)
+    resources = AppendEnvironmentVariable('GZ_SIM_RESOURCE_PATH', os.path.join(gz_share, 'models'))
+
+    nodes = [resources, gazebo, spawn_robot, robot_state_publisher, bridge, cloud_relay,
              jsb_spawner, jtc_after_jsb]
     nodes += static_tfs
 
@@ -175,11 +181,14 @@ def launch_setup(context, *args, **kwargs):
 
 def generate_launch_description():
     return LaunchDescription([
-        DeclareLaunchArgument('gui', default_value='false', description='Start the Gazebo GUI'),
+        DeclareLaunchArgument('gui', default_value='true',
+                              description='Start the Gazebo GUI (false: headless)'),
         DeclareLaunchArgument('rviz', default_value='',
                               description='Start RViz (default: same as gui)'),
         DeclareLaunchArgument('rtf', default_value='1.0',
                               description='Gazebo real_time_factor (0 = as fast as possible)'),
+        DeclareLaunchArgument('world', default_value='plain', choices=['plain', 'warehouse'],
+                              description='plain cell or the cell inside the warehouse'),
         DeclareLaunchArgument('cell_config', default_value=_default_cell_config(),
                               description='Path to cell_config.yaml'),
         OpaqueFunction(function=launch_setup),

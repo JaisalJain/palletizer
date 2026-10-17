@@ -2,7 +2,10 @@
 // palletizer_tools/pallet_exchanger). It moves a set of models (a pallet and the boxes on
 // it) rigidly together by a planar displacement with a trapezoidal velocity profile, by
 // teleporting every model every physics step (WorldPoseCmd), so the stack keeps its
-// relative configuration.
+// relative configuration. Every link of a carried model also gets the conveyor's velocity
+// (and no rotation) each step: a pose command alone leaves the bodies' velocities to physics,
+// so gravity accumulated between teleports and the boxes sank visibly within each step (the
+// model pose reported the commanded pose, the rendered links did not).
 //
 // Models are driven ONLY while a move is active. Between moves the plugin touches nothing:
 // boxes on the pallet are free physics bodies (collapse / shift detection depends on it).
@@ -29,12 +32,14 @@
 #include <gz/math/Pose3.hh>
 #include <gz/msgs/stringmsg.pb.h>
 #include <gz/plugin/Register.hh>
+#include <gz/sim/Link.hh>
 #include <gz/sim/Model.hh>
 #include <gz/sim/System.hh>
 #include <gz/sim/Util.hh>
 #include <gz/sim/components/Model.hh>
 #include <gz/sim/components/Name.hh>
 #include <gz/sim/components/ParentEntity.hh>
+#include <gz/sim/components/Pose.hh>
 #include <gz/transport/Node.hh>
 
 namespace palletizer_gazebo
@@ -108,11 +113,21 @@ public:
     if (this->active && !_info.paused) {
       const double s = this->Distance(t - this->t0);
       const double f = this->total > 0 ? s / this->total : 1.0;
-      for (auto & [e, p0] : this->models) {
-        gz::math::Pose3d p = p0;
+      // conveyor velocity in the world frame (0 on the last step: released at rest)
+      const double v = t - this->t0 >= this->duration ? 0.0 : this->Speed(t - this->t0);
+      const gz::math::Vector3d vel = this->total > 0 ?
+        gz::math::Vector3d(this->cmd.dx, this->cmd.dy, 0.0) * (v / this->total) :
+        gz::math::Vector3d::Zero;
+      for (auto & m : this->models) {
+        gz::math::Pose3d p = m.pose0;
         p.Pos().X() += f * this->cmd.dx;
         p.Pos().Y() += f * this->cmd.dy;
-        gz::sim::Model(e).SetWorldPoseCmd(_ecm, p);
+        gz::sim::Model(m.entity).SetWorldPoseCmd(_ecm, p);
+        for (const auto & [link, rot] : m.links) {
+          const gz::sim::Link l(link);
+          l.SetLinearVelocity(_ecm, (p.Rot() * rot).RotateVectorReverse(vel));   // link frame
+          l.SetAngularVelocity(_ecm, gz::math::Vector3d::Zero);
+        }
       }
       if (t - this->t0 >= this->duration) {
         this->Finish(_ecm);
@@ -146,7 +161,12 @@ private:
         gzwarn << "PalletMover: no model [" << name << "]\n";
         continue;
       }
-      this->models.emplace_back(e, gz::sim::worldPose(e, _ecm));
+      Carried m{e, gz::sim::worldPose(e, _ecm), {}};
+      for (const auto link : gz::sim::Model(e).Links(_ecm)) {
+        const auto * rel = _ecm.Component<gz::sim::components::Pose>(link);   // in the model
+        m.links.emplace_back(link, rel ? rel->Data().Rot() : gz::math::Quaterniond::Identity);
+      }
+      this->models.push_back(m);
     }
     this->cmd = c;
     this->total = std::hypot(c.dx, c.dy);
@@ -171,6 +191,14 @@ private:
     this->lastId = this->cmd.id;
   }
 
+  double Speed(double dt) const
+  {
+    if (dt <= 0 || dt >= this->duration) {return 0.0;}
+    if (dt < this->tacc) {return this->cmd.accel * dt;}
+    if (dt < this->duration - this->tacc) {return this->vmax;}
+    return this->cmd.accel * (this->duration - dt);
+  }
+
   double Distance(double dt) const
   {
     const double a = this->cmd.accel;
@@ -193,7 +221,13 @@ private:
   bool active{false};
   MoveCmd cmd;
   long lastId{0};
-  std::vector<std::pair<gz::sim::Entity, gz::math::Pose3d>> models;
+  struct Carried
+  {
+    gz::sim::Entity entity;
+    gz::math::Pose3d pose0;                                          // world pose at the start
+    std::vector<std::pair<gz::sim::Entity, gz::math::Quaterniond>> links;   // rot in the model
+  };
+  std::vector<Carried> models;
   double total{0}, vmax{0}, tacc{0}, duration{0}, t0{0};
   double lastState{-1.0};
 };

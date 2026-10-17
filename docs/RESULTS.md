@@ -16,6 +16,7 @@ v2 (measured pallets, single-SKU patterns, pallet exchange) comes first; the v1 
   - [Milestone D — Pallet-full decision and exchange handshake](#milestone-d--pallet-full-decision-and-exchange-handshake)
   - [Milestone F — Speed](#milestone-f--speed)
   - [Mixed mode (v1 planners) under v2](#mixed-mode-v1-planners-under-v2)
+  - [Warehouse world (`world:=warehouse`)](#warehouse-world-worldwarehouse)
   - [v2 test changes](#v2-test-changes)
 - [v1 results](#v1-results)
   - [Acceptance summary (v1 "DONE" criteria)](#acceptance-summary-v1-done-criteria)
@@ -351,6 +352,28 @@ broke the mass rule for every position after weighing: the pallet was closed wit
 the cup, the arm waited at the hold pose during the exchange, and the box went onto the new
 pallet).
 
+## Warehouse world (`world:=warehouse`)
+
+The warehouse (built in Blender, `tools/warehouse_blender`) is set dressing around the same cell.
+Each evaluation ran in a fresh headless sim per world (`SIM_ARGS="seed:=42 world:=<world>"
+sim_ctl.sh start`), with the same commands and thresholds as above. RTF is measured from `/clock`
+against wall time over each run (laptop, RTX 5060 8 GB; requested RTF 1.0).
+
+| | `world:=plain` | `world:=warehouse` | Threshold |
+|---|---|---|---|
+| `eval_perception --n 60 --seed 7` | 68/68, dims mean 0.03 / max 0.32 mm, grasp centre 0.03 mm, yaw 0.009° | identical | 5 / 12 / 5 mm, 1.5° |
+| `eval_pallet_perception --reps 3` | 9/9, dims ≤ 3.09 mm, pose ≤ 0.47 mm / 0.169°, placements ≤ 0.67 mm, height map ≤ 4.36 mm, shoves 10→0, 40→1, 30→1 | same; height map ≤ 4.25 mm | 10 mm, 1°, 5 mm, 10 mm |
+| `pick_place_test --n 20` | 20/20, place err 0.04 / 0.18 mm, yaw ≤ 0.068°, neighbours 0.00 mm | 20/20, 0.04 / 0.20 mm, yaw ≤ 0.068°, neighbours 0.00 mm | ≥ 19/20, 15 mm, 3°, 10 mm |
+| RTF headless, idle / during pick_place | 0.86 / 0.84 | 0.85 / 0.82 | |
+| RTF `gui:=true` (Gazebo + RViz), idle | 0.79 | 0.65 | |
+
+Depth-based perception does not see the warehouse: nothing of it is inside either camera's ROI
+(`offline/wh_verify.py`: 0 of 8.75 M surface samples inside the robot reach, pallet lane,
+conveyor, photo-eye beams or camera ROIs; the conveyor camera's image corners see the base of the
+north fence, outside its ROI). The RGB images now show textured concrete; its rendered brightness
+is within ~5 % of the plain ground. The extra geometry costs 1–3 % RTF headless and ~18 % with the
+Gazebo GUI open.
+
 ## v2 test changes
 
 v0 / v1 tests still pass; the ones that relied on the old behaviour were updated, none deleted:
@@ -432,7 +455,7 @@ distortion, no blur and no mixed pixels at depth edges; the only error source is
 Gaussian depth noise, which averaging and the plane intersection suppress. A real sensor
 will be several mm worse; the thresholds leave room for that.
 
-**Touching boxes** (`src/palletizer_perception/test/test_perception_touching.py`, 1 mm gap):
+**Touching boxes** (`src/palletizer_perception/test/sim_perception_touching.py`, 1 mm gap):
 
 | Case | Result |
 |---|---|

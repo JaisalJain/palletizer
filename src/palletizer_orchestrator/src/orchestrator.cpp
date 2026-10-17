@@ -176,6 +176,28 @@ struct Context
 };
 using ContextPtr = std::shared_ptr<Context>;
 
+// Timeout in node (sim) time, capped in wall time (10 x timeout + 30 s) in case the clock
+// stops: what the tree waits for takes sim time (fresh frames, F/T windows, motion), and the
+// RTF falls to ~0.04 with big interlocked stacks (same rule as palletizer_tools/sim_time.py).
+class SimTimer
+{
+public:
+  void start(const rclcpp::Time & now)
+  {
+    sim0_ = now;
+    wall0_ = std::chrono::steady_clock::now();
+  }
+  bool expired(const rclcpp::Time & now, double timeout) const
+  {
+    double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - wall0_).count();
+    return (now - sim0_).seconds() > timeout || wall > 10.0 * timeout + 30.0;
+  }
+
+private:
+  rclcpp::Time sim0_;
+  std::chrono::steady_clock::time_point wall0_;
+};
+
 // Generic "call a service asynchronously" stateful node.
 template<class Srv>
 class ServiceNode : public BT::StatefulActionNode
@@ -195,14 +217,14 @@ public:
       return BT::NodeStatus::FAILURE;
     }
     future_ = client_->async_send_request(req).future.share();
-    start_ = std::chrono::steady_clock::now();
+    timer_.start(ctx_->now());
     return BT::NodeStatus::RUNNING;
   }
 
   BT::NodeStatus onRunning() override
   {
     if (future_.wait_for(0s) != std::future_status::ready) {
-      if (std::chrono::steady_clock::now() - start_ > std::chrono::duration<double>(timeout_)) {
+      if (timer_.expired(ctx_->now(), timeout_)) {
         RCLCPP_WARN(ctx_->log(), "%s: timeout", name().c_str());
         return BT::NodeStatus::FAILURE;
       }
@@ -220,7 +242,7 @@ protected:
   ContextPtr ctx_;
   typename rclcpp::Client<Srv>::SharedPtr client_;
   std::shared_future<typename Srv::Response::SharedPtr> future_;
-  std::chrono::steady_clock::time_point start_;
+  SimTimer timer_;
   double timeout_;
 };
 
@@ -233,7 +255,7 @@ public:
   static BT::PortsList providedPorts() {return {BT::InputPort<double>("timeout", 300.0, "s")};}
   BT::NodeStatus onStart() override
   {
-    start_ = std::chrono::steady_clock::now();
+    timer_.start(ctx_->now());
     return onRunning();
   }
   BT::NodeStatus onRunning() override
@@ -245,7 +267,7 @@ public:
       return BT::NodeStatus::SUCCESS;
     }
     double t = getInput<double>("timeout").value();
-    if (std::chrono::steady_clock::now() - start_ > std::chrono::duration<double>(t)) {
+    if (timer_.expired(ctx_->now(), t)) {
       RCLCPP_WARN(ctx_->log(), "no box arrived within %.0f s", t);
       return BT::NodeStatus::FAILURE;
     }
@@ -255,7 +277,7 @@ public:
 
 private:
   ContextPtr ctx_;
-  std::chrono::steady_clock::time_point start_;
+  SimTimer timer_;
 };
 
 class DetectBoxNode : public ServiceNode<pi::srv::DetectBox>
@@ -717,7 +739,7 @@ public:
   {
     for (auto & ready : pending_) {
       if (!ready()) {
-        if (std::chrono::steady_clock::now() - start_ > std::chrono::duration<double>(timeout_)) {
+        if (timer_.expired(ctx_->now(), timeout_)) {
           RCLCPP_WARN(ctx_->log(), "%s: timeout", name().c_str());
           return BT::NodeStatus::FAILURE;
         }
@@ -740,13 +762,13 @@ protected:
   void begin()
   {
     pending_.clear();
-    start_ = std::chrono::steady_clock::now();
+    timer_.start(ctx_->now());
   }
   virtual BT::NodeStatus finish() = 0;
   ContextPtr ctx_;
   double timeout_;
   std::vector<std::function<bool()>> pending_;
-  std::chrono::steady_clock::time_point start_;
+  SimTimer timer_;
 };
 
 // Forget the old pallet everywhere (perception model, packing model, planning scene).

@@ -1,13 +1,19 @@
 <?xml version="1.0"?>
 <!--
   Palletizing cell world. Rendered with xacro at launch time from cell_config.yaml:
-    xacro palletizing_cell.sdf.xacro cell_config:=<path> > palletizing_cell.sdf
+    xacro palletizing_cell.sdf.xacro cell_config:=<path> [environment:=plain|warehouse] > palletizing_cell.sdf
+  environment:=warehouse adds the palletizer_warehouse model (models/, built in Blender) around the
+  cell: set dressing only. It keeps out of the robot's reach, the pallet lane, the photo-eye
+  beams and the cameras' ROIs, and its roof/walls cast no shadows, so the lighting the cameras
+  see is unchanged. The ground collision is always this world's ground_plane.
   Conveyor pattern from gz-sim8 worlds/conveyor.sdf (TrackController on a static belt link).
   Collision shapes are plain boxes; visuals may be fancier.
 -->
 <sdf version="1.9" xmlns:xacro="http://wiki.ros.org/xacro">
   <xacro:arg name="cell_config" default=""/>
   <xacro:arg name="real_time_factor" default="1.0"/>
+  <xacro:arg name="environment" default="plain"/>
+  <xacro:property name="environment" value="$(arg environment)"/>
   <xacro:property name="cell" value="${xacro.load_yaml('$(arg cell_config)')}"/>
   <xacro:property name="cv" value="${cell['conveyor']}"/>
   <xacro:property name="cam" value="${cell['camera']}"/>
@@ -100,12 +106,23 @@
         <collision name="collision">
           <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
         </collision>
-        <visual name="visual">
-          <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
-          <xacro:material rgba="${[0.55, 0.55, 0.52, 1]}"/>
-        </visual>
+        <!-- warehouse: the floor visual comes with the warehouse model (same mean colour) -->
+        <xacro:if value="${environment == 'plain'}">
+          <visual name="visual">
+            <geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+            <xacro:material rgba="${[0.55, 0.55, 0.52, 1]}"/>
+          </visual>
+        </xacro:if>
       </link>
     </model>
+
+    <xacro:if value="${environment == 'warehouse'}">
+      <include>
+        <uri>model://palletizer_warehouse</uri>
+        <name>warehouse</name>
+        <pose>0 0 0 0 0 0</pose>
+      </include>
+    </xacro:if>
 
     <!-- ============================ Conveyor ============================ -->
     <xacro:property name="cv_len" value="${cv['x_end'] - cv['x_start']}"/>
@@ -209,6 +226,25 @@
               <geometry><box><size>0.01 0.04 0.05</size></box></geometry>
               <xacro:material rgba="${[0.9, 0.1, 0.1, 1]}"/>
             </visual>
+            <!-- Posts and floor plates under both heads (visual only, like the heads). Each post
+                 stays inside its head's footprint (the overhead camera sees only the head), ends
+                 under the head (below the beam and below min_object_height above the belt). -->
+            <xacro:property name="eye_z" value="${cv['belt_top_z'] + eye['height']}"/>
+            <xacro:property name="post_h" value="${eye_z - 0.025}"/>
+            <xacro:macro name="eye_post" params="name x sx sy">
+              <visual name="${name}_post">
+                <pose>${x} 0 ${-0.025 - post_h / 2} 0 0 0</pose>
+                <geometry><box><size>${sx} ${sy} ${post_h}</size></box></geometry>
+                <xacro:material rgba="${[0.2, 0.22, 0.25, 1]}"/>
+              </visual>
+              <visual name="${name}_foot">
+                <pose>${x} 0 ${0.005 - eye_z} 0 0 0</pose>
+                <geometry><box><size>0.10 0.10 0.01</size></box></geometry>
+                <xacro:material rgba="${[0.2, 0.22, 0.25, 1]}"/>
+              </visual>
+            </xacro:macro>
+            <xacro:eye_post name="emitter" x="0" sx="0.02" sy="0.02"/>
+            <xacro:eye_post name="reflector" x="${cv['belt_width'] + 2 * eye['offset']}" sx="0.008" sy="0.03"/>
             <sensor name="eye_${z['name']}" type="gpu_lidar">
               <always_on>true</always_on>
               <update_rate>${eye['rate']}</update_rate>

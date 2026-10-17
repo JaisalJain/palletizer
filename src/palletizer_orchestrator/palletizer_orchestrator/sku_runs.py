@@ -1,7 +1,7 @@
 """Single-SKU acceptance runs: one full pallet per SKU, headless, unattended.
 
 Each run is a fresh simulation:
-    ros2 launch palletizer_bringup palletizer.launch.py mode:=single_sku sku:=<key>
+    ros2 launch palletizer_bringup palletizer.launch.py mode:=single_sku sku:=<key> gui:=false
          max_pallets:=1 finish_with_next_box:=true seed:=<s> rtf:=<rtf> run_name:=sku_<key>
 It ends when the first pallet is FULL, the exchange has brought the next pallet and its first
 box is placed. Extra runs: `--order` (a SKU change mid-stream, closed with SKU_CHANGE) and any
@@ -125,9 +125,13 @@ def summary(names):
         pat = f'{r["boxes_in_pattern"]}'
         opt = ''
         # optimum per layer (deck, no reachability) and per-layer counts from the log
-        log = os.path.join(RESULTS, 'logs', f'sku_{name}.log')
+        # the log of the attempt that produced the result (the last one, after a retry)
+        logs = [os.path.join(RESULTS, 'logs', f'sku_{name}{s}.log')
+                for s in ('', '_attempt2', '_attempt3')]
+        logs = [p for p in logs if os.path.exists(p)]
+        log = logs[-1] if logs else ''
         per_layer = ''
-        if os.path.exists(log):
+        if log:
             for line in open(log):
                 if 'pattern for' in line and '(optimum' in line:
                     seg = line.split('mm (usable')[1]

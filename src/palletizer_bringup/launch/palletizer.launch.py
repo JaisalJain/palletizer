@@ -1,4 +1,4 @@
-"""Top-level launch for the palletizing cell (headless by default).
+"""Top-level launch for the palletizing cell (Gazebo + RViz by default, gui:=false: headless).
 
   mode:=manual      simulation + perception (conveyor + pallet camera) + packing + MoveIt/motion
                     + spawner/conveyor + pallet conveyor (a first pallet is delivered)
@@ -9,12 +9,13 @@
   mode:=single_sku  autonomous single-SKU palletizing with layer patterns; the spawner sends
                     sku:=<catalog key | LxWxH mm> or order:="<sku>:<n>, <sku>:<n>"
 
-Args: gui:=true|false (default false: headless)  rviz:=true|false (default: gui)
+Args: gui:=true|false (default true; false: headless)  rviz:=true|false (default: gui)
       planner:=heuristic|naive  seed:=<int> (-1 random)  spawn_rate:=<attempts/s>  rtf:=<float>
       max_pallets:=<int> (0 = forever)  finish_with_next_box:=true|false (after max_pallets,
       also place the first box of the next pallet)  run_name:=  results_dir:=
       sku:=  order:=  pallets:="EUR,HALF"  exchange_mode:=auto|operator
       pattern_priority:=count|interlock  packing:=mixed|single_sku (manual mode)
+      world:=plain|warehouse (warehouse: the cell inside the Blender-built warehouse)
 """
 
 import os
@@ -50,7 +51,7 @@ def setup(context, *args, **kwargs):
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('palletizer_gazebo'), 'launch', 'sim.launch.py')),
         launch_arguments={'gui': lc('gui'), 'rviz': lc('rviz'), 'rtf': lc('rtf'),
-                          'cell_config': cell_config}.items(),
+                          'world': lc('world'), 'cell_config': cell_config}.items(),
     )
     common = {'use_sim_time': True, 'cell_config': cell_config}
     node = lambda pkg, exe, extra=None, **kw: Node(  # noqa: E731
@@ -113,7 +114,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('mode', default_value='manual',
                               choices=['manual', 'mixed', 'single_sku', 'auto']),
-        DeclareLaunchArgument('gui', default_value='false'),
+        DeclareLaunchArgument('gui', default_value='true'),
         DeclareLaunchArgument('rviz', default_value=''),
         DeclareLaunchArgument('planner', default_value='heuristic',
                               choices=['heuristic', 'naive']),
@@ -123,6 +124,7 @@ def generate_launch_description():
         DeclareLaunchArgument('spawn_rate', default_value='',
                               description='spawn attempts/s (default: 0 manual, config auto)'),
         DeclareLaunchArgument('rtf', default_value='1.0'),
+        DeclareLaunchArgument('world', default_value='plain', choices=['plain', 'warehouse']),
         DeclareLaunchArgument('max_pallets', default_value='0'),
         DeclareLaunchArgument('finish_with_next_box', default_value='false'),
         DeclareLaunchArgument('run_name', default_value=''),

@@ -83,7 +83,10 @@ def main(argv=None):
         for rep in range(args.reps):
             res = sim.exchange_pallet(pallet_type=key)
             if not res.success:
-                print(f'exchange failed: {res.message}')
+                # counted as a failed measurement (the denominator stays types x reps)
+                print(f'{key} #{rep}: EXCHANGE FAILED ({res.message})', flush=True)
+                out['pallets'].append({'type': key, 'rep': rep, 'success': False,
+                                       'message': f'exchange failed: {res.message}'})
                 continue
             time.sleep(1.0)
             m = sim.call(measure, MeasurePallet.Request(), timeout=60.0)
@@ -211,10 +214,11 @@ def main(argv=None):
     out['height_map'] = {
         'occupied_cells': int(occ.sum()), 'interior_cells': int(inner.sum()),
         'interior_observed': int((inner & obs).sum()),
-        'interior_err_mean_mm': float(e_in.mean() * 1000), 'interior_err_max_mm': float(
-            e_in.max() * 1000),
-        'interior_within_10mm_pct': float((e_in <= 0.010).mean() * 100),
-        'all_occupied_within_10mm_pct': float((e_all <= 0.010).mean() * 100),
+        'interior_err_mean_mm': float(e_in.mean() * 1000) if e_in.size else float('inf'),
+        'interior_err_max_mm': float(e_in.max() * 1000) if e_in.size else float('inf'),
+        'interior_within_10mm_pct': float((e_in <= 0.010).mean() * 100) if e_in.size else 0.0,
+        'all_occupied_within_10mm_pct': float((e_all <= 0.010).mean() * 100)
+        if e_all.size else 0.0,
         'unobserved_pct': float((~obs & occ).sum() / max(occ.sum(), 1) * 100)}
     print(f'height map: {out["height_map"]}', flush=True)
 
@@ -253,10 +257,11 @@ def main(argv=None):
         json.dump(out, fh, indent=1, default=float)
     P = [r for r in out['pallets'] if r['success']]
     Pl = [r for r in out['placements'] if r['detected']]
-    dims = max(max(r['err_u_mm'], r['err_v_mm']) for r in P)
-    cen = max(r['err_center_mm'] for r in P)
-    yawm = max(r['err_yaw_deg'] for r in P)
-    agree = max(r['agree_xy_mm'] for r in Pl)
+    inf = float('inf')        # nothing measured -> the check fails instead of crashing
+    dims = max((max(r['err_u_mm'], r['err_v_mm']) for r in P), default=inf)
+    cen = max((r['err_center_mm'] for r in P), default=inf)
+    yawm = max((r['err_yaw_deg'] for r in P), default=inf)
+    agree = max((r['agree_xy_mm'] for r in Pl), default=inf)
     hmx = out['height_map']['interior_err_max_mm']
     shove_ok = all((r['events'] > 0) == r['expected_event'] and r['other_events'] == 0
                    for r in out['shove'])
